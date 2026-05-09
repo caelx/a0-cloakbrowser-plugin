@@ -18,7 +18,11 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v6
+      - name: Build pinned Agent Zero image
+        run: docker build -t cloakbrowser-agent-zero-ci -f ci/agent-zero.Dockerfile .
       - run: bash ci/run_agent_zero_integration.sh
+        env:
+          CLOAKBROWSER_AGENT_ZERO_IMAGE: cloakbrowser-agent-zero-ci
       - uses: actions/upload-artifact@v7
         if: always()
         with:

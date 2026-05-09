@@ -2,11 +2,12 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-image="${CLOAKBROWSER_AGENT_ZERO_IMAGE:-agent0ai/agent-zero:latest}"
+image="${CLOAKBROWSER_AGENT_ZERO_IMAGE:-${AGENT_ZERO_IMAGE:-agent0ai/agent-zero:latest}}"
 repo="${CLOAKBROWSER_PLUGIN_REPO:-file:///plugin-src}"
 
 docker run --rm --shm-size=2g \
   -e CLOAKBROWSER_PLUGIN_REPO="$repo" \
+  -e CLOAKBROWSER_LIVE_DETECTOR="${CLOAKBROWSER_LIVE_DETECTOR:-0}" \
   -v "$root:/plugin-src:ro" \
   -v "$root/artifacts:/artifacts" \
   "$image" \
@@ -41,5 +42,8 @@ PY
     python ci/run_browser_tool_smoke.py
     python ci/run_runtime_smoke.py
     python ci/run_detection_smoke.py
+    if [ "${CLOAKBROWSER_LIVE_DETECTOR:-0}" = "1" ]; then
+      python ci/run_live_detector_smoke.py
+    fi
     python ci/run_uninstall_restore.py
   '

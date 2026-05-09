@@ -19,6 +19,26 @@
           <input type="text" x-model="config.runtime.display" />
         </label>
         <label>
+          <span>Auto-start Xvfb</span>
+          <input type="checkbox" x-model="config.runtime.auto_start_xvfb" />
+        </label>
+        <label>
+          <span>Reuse display</span>
+          <input type="checkbox" x-model="config.runtime.reuse_existing_display" />
+        </label>
+        <label>
+          <span>Display width</span>
+          <input type="number" x-model.number="config.runtime.display_width" />
+        </label>
+        <label>
+          <span>Display height</span>
+          <input type="number" x-model.number="config.runtime.display_height" />
+        </label>
+        <label>
+          <span>Display depth</span>
+          <input type="number" x-model.number="config.runtime.display_depth" />
+        </label>
+        <label>
           <span>Viewport width</span>
           <input type="number" x-model.number="config.runtime.viewport_width" />
         </label>
@@ -42,16 +62,124 @@
           <input type="text" x-model="config.network_location.proxy" autocomplete="off" />
         </label>
         <label>
-          <span>uBlock Origin Lite</span>
+          <span>GeoIP</span>
+          <input type="checkbox" x-model="config.network_location.geoip" />
+        </label>
+        <label>
+          <span>Timezone</span>
+          <input type="text" x-model="config.network_location.timezone" />
+        </label>
+        <label>
+          <span>Locale</span>
+          <input type="text" x-model="config.network_location.locale" />
+        </label>
+        <label>
+          <span>WebRTC mode</span>
+          <select x-model="config.network_location.webrtc_ip_mode">
+            <option value="auto">auto</option>
+            <option value="explicit">explicit</option>
+            <option value="disabled">disabled</option>
+          </select>
+        </label>
+        <label>
+          <span>WebRTC IP</span>
+          <input type="text" x-model="config.network_location.webrtc_ip" />
+        </label>
+        <label>
+          <span>Fingerprint seed mode</span>
+          <select x-model="config.identity.fingerprint_seed_mode">
+            <option value="random">random</option>
+            <option value="fixed">fixed</option>
+          </select>
+        </label>
+        <label>
+          <span>Fingerprint seed</span>
+          <input type="text" x-model="config.identity.fingerprint_seed" />
+        </label>
+        <label>
+          <span>Fingerprint platform</span>
+          <input type="text" x-model="config.identity.fingerprint_platform" />
+        </label>
+        <label>
+          <span>Fingerprint noise</span>
+          <input type="checkbox" x-model="config.identity.fingerprint_noise" />
+        </label>
+        <label>
+          <span>Fingerprint screen width</span>
+          <input type="number" x-model.number="config.identity.fingerprint_screen_width" />
+        </label>
+        <label>
+          <span>Fingerprint screen height</span>
+          <input type="number" x-model.number="config.identity.fingerprint_screen_height" />
+        </label>
+        <label>
+          <span>Storage quota MB</span>
+          <input type="text" x-model="config.identity.storage_quota_mb" />
+        </label>
+        <label>
+          <span>Install uBlock Origin Lite</span>
+          <input type="checkbox" x-model="config.extensions.install_ublock_origin_lite" />
+        </label>
+        <label>
+          <span>Enable uBlock Origin Lite</span>
           <input type="checkbox" x-model="config.extensions.enable_ublock_origin_lite" />
         </label>
         <label>
-          <span>I still don't care about cookies</span>
+          <span>Update uBlock Origin Lite</span>
+          <input type="checkbox" x-model="config.extensions.update_ublock_origin_lite_on_setup" />
+        </label>
+        <label>
+          <span>Install cookie extension</span>
+          <input type="checkbox" x-model="config.extensions.install_i_still_dont_care_about_cookies" />
+        </label>
+        <label>
+          <span>Enable cookie extension</span>
           <input type="checkbox" x-model="config.extensions.enable_i_still_dont_care_about_cookies" />
         </label>
         <label>
-          <span>Bypass Paywalls Clean</span>
+          <span>Update cookie extension</span>
+          <input type="checkbox" x-model="config.extensions.update_i_still_dont_care_about_cookies_on_setup" />
+        </label>
+        <label>
+          <span>Install Bypass Paywalls Clean</span>
+          <input type="checkbox" x-model="config.extensions.install_bypass_paywalls_clean" />
+        </label>
+        <label>
+          <span>Enable Bypass Paywalls Clean</span>
           <input type="checkbox" x-model="config.extensions.enable_bypass_paywalls_clean" />
+        </label>
+        <label>
+          <span>Update Bypass Paywalls Clean</span>
+          <input type="checkbox" x-model="config.extensions.update_bypass_paywalls_clean_on_setup" />
+        </label>
+        <label>
+          <span>uBOL filtering mode</span>
+          <select x-model="config.ublock_origin_lite.filtering_mode">
+            <option value="none">none</option>
+            <option value="basic">basic</option>
+            <option value="optimal">optimal</option>
+            <option value="complete">complete</option>
+          </select>
+        </label>
+        <label>
+          <span>uBOL strict block</span>
+          <input type="checkbox" x-model="config.ublock_origin_lite.strict_block_mode" />
+        </label>
+        <label>
+          <span>uBOL rulesets</span>
+          <textarea x-model="config.ublock_origin_lite.enabled_rulesets"></textarea>
+        </label>
+        <label>
+          <span>Extra launch args</span>
+          <textarea x-model="config.advanced.extra_args"></textarea>
+        </label>
+        <label>
+          <span>Disable shadow DOM init</span>
+          <input type="checkbox" x-model="config.advanced.disable_shadow_dom_init_patch" />
+        </label>
+        <label>
+          <span>Preserve placeholder page</span>
+          <input type="checkbox" x-model="config.advanced.preserve_headed_placeholder_page" />
         </label>
       </div>
     </template>
@@ -68,8 +196,12 @@
       gap: 12px;
     }
     .cloakbrowser-config input,
-    .cloakbrowser-config select {
+    .cloakbrowser-config select,
+    .cloakbrowser-config textarea {
       min-height: 34px;
+    }
+    .cloakbrowser-config textarea {
+      min-height: 76px;
     }
   </style>
 </body>

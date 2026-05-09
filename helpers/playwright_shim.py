@@ -61,10 +61,13 @@ def unpatch_playwright() -> dict[str, Any]:
 def status() -> dict[str, Any]:
     return {
         "patched": bool(_STATE.get("patched")),
+        "patching": "process-local",
+        "persistent": False,
         "patched_targets": list(_STATE.get("patched_targets", [])),
         "last_launch": dict(_STATE.get("last_launch", {})),
         "async_error": _STATE.get("async_error", ""),
         "sync_error": _STATE.get("sync_error", ""),
+        "arg_filtering": "always_on",
     }
 
 

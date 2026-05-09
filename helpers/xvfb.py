@@ -23,18 +23,34 @@ def ensure_display(config: dict[str, Any], manifest: dict[str, Any]) -> dict[str
     if not runtime["auto_start_xvfb"]:
         return {"ok": False, "display": os.environ.get("DISPLAY", ""), "reason": "auto_start_xvfb disabled"}
 
-    display = preferred if preferred else ":99"
-    if display_usable(display):
-        os.environ["DISPLAY"] = display
-        manifest["display"] = display
-        return {"ok": True, "display": display, "reused": True}
-
-    start_result = start_xvfb(display, runtime["display_width"], runtime["display_height"], runtime["display_depth"])
-    if start_result["ok"]:
-        os.environ["DISPLAY"] = display
-        manifest["display"] = display
-        manifest["xvfb"] = start_result
-    return start_result
+    attempts: list[dict[str, Any]] = []
+    for display in candidate_displays(preferred):
+        if display_usable(display):
+            os.environ["DISPLAY"] = display
+            manifest["display"] = display
+            return {"ok": True, "display": display, "reused": True, "attempts": attempts}
+        if display_socket_exists(display):
+            attempts.append({"display": display, "ok": False, "reason": "display socket exists but is unusable"})
+            continue
+        start_result = start_xvfb(
+            display,
+            runtime["display_width"],
+            runtime["display_height"],
+            runtime["display_depth"],
+        )
+        attempts.append(start_result)
+        if start_result["ok"]:
+            os.environ["DISPLAY"] = display
+            manifest["display"] = display
+            manifest["xvfb"] = start_result
+            manifest["xvfb"]["attempts"] = attempts
+            return start_result
+    return {
+        "ok": False,
+        "display": preferred,
+        "reason": "no candidate display became usable",
+        "attempts": attempts,
+    }
 
 
 def display_usable(display: str) -> bool:
@@ -46,6 +62,20 @@ def display_usable(display: str) -> bool:
         result = subprocess.run(["xdpyinfo"], env=env, check=False, capture_output=True, text=True, timeout=5)
         return result.returncode == 0
     return Path(f"/tmp/.X11-unix/X{display.lstrip(':').split('.')[0]}").exists()
+
+
+def display_socket_exists(display: str) -> bool:
+    if not display:
+        return False
+    return Path(f"/tmp/.X11-unix/X{display.lstrip(':').split('.')[0]}").exists()
+
+
+def candidate_displays(preferred: str | None) -> list[str]:
+    candidates: list[str] = []
+    for display in [preferred or ":99", ":99", ":98", ":100", ":97", ":101"]:
+        if display and display not in candidates:
+            candidates.append(display)
+    return candidates
 
 
 def start_xvfb(display: str, width: int, height: int, depth: int) -> dict[str, Any]:

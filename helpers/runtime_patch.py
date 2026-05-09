@@ -8,6 +8,7 @@ from typing import Any
 
 _STATE: dict[str, Any] = {
     "patched": False,
+    "shadow_dom_disabled": False,
     "original_shadow_dom_script": None,
     "original_start": None,
 }
@@ -23,16 +24,20 @@ def apply_runtime_patch() -> dict[str, Any]:
         _STATE["error"] = str(exc)
         return status()
 
+    from .config import get_config
+
+    cfg = get_config()
     core = runtime._BrowserRuntimeCore
-    _STATE["original_shadow_dom_script"] = core._shadow_dom_script
+    if cfg["advanced"]["disable_shadow_dom_init_patch"]:
+        _STATE["original_shadow_dom_script"] = core._shadow_dom_script
+        core._shadow_dom_script = staticmethod(_empty_shadow_dom_script)
+        _STATE["shadow_dom_disabled"] = True
+    else:
+        _STATE["original_shadow_dom_script"] = None
+        _STATE["shadow_dom_disabled"] = False
     _STATE["original_start"] = core._start
 
-    def _empty_shadow_dom_script() -> str:
-        return "(() => {})();"
-
     async def _patched_start(self):
-        from .config import get_config
-
         cfg = get_config()
         restore_page_close = None
         if cfg["advanced"]["preserve_headed_placeholder_page"] and cfg["runtime"]["headed"]:
@@ -72,7 +77,6 @@ def apply_runtime_patch() -> dict[str, Any]:
         except Exception:
             return
 
-    core._shadow_dom_script = staticmethod(_empty_shadow_dom_script)
     core._start = _patched_start
     _STATE["patched"] = True
     return status()
@@ -93,6 +97,7 @@ def unpatch_runtime() -> dict[str, Any]:
     except Exception as exc:
         _STATE["error"] = str(exc)
     _STATE["patched"] = False
+    _STATE["shadow_dom_disabled"] = False
     return status()
 
 
@@ -100,8 +105,14 @@ def status() -> dict[str, Any]:
     return {
         "patched": bool(_STATE.get("patched")),
         "patching": "process-local",
+        "persistent": False,
+        "shadow_dom_disabled": bool(_STATE.get("shadow_dom_disabled")),
         "error": _STATE.get("error", ""),
     }
+
+
+def _empty_shadow_dom_script() -> str:
+    return "(() => {})();"
 
 
 @contextmanager

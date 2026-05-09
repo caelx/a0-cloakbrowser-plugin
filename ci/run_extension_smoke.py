@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import asyncio
 import json
 import copy
 import sys
 from pathlib import Path
 
 
-def main() -> int:
+async def main() -> int:
     sys.path.insert(0, "/git/agent-zero")
     from usr.plugins.cloakbrowser.helpers.config import get_config
     from usr.plugins.cloakbrowser.helpers.extensions import (
@@ -52,14 +53,66 @@ def main() -> int:
             "metadata": manifest.get("extensions", {}).get("bypass_paywalls_clean", {}),
         },
     }
+    result["ublock_origin_lite_probe"] = await run_ubol_probe()
     Path("artifacts").mkdir(exist_ok=True)
     Path("artifacts/extension-results.json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     assert all(path in browser_config.get("extension_paths", []) for path in active)
     assert Path(bpc_path, "manifest.json").is_file()
     assert bpc_path in enabled_browser_config.get("extension_paths", [])
     assert bpc_path not in disabled_browser_config.get("extension_paths", [])
+    assert result["ublock_origin_lite_probe"]["blocked"], result["ublock_origin_lite_probe"]
     return 0
 
 
+async def run_ubol_probe() -> dict[str, object]:
+    from usr.plugins.cloakbrowser.helpers.runtime_patch import apply_runtime_patch
+    from usr.plugins.cloakbrowser.helpers.playwright_shim import patch_playwright
+    from plugins._browser.helpers.runtime import _BrowserRuntimeCore
+
+    apply_runtime_patch()
+    patch_playwright()
+    core = _BrowserRuntimeCore("cloakbrowser-ubol-ci")
+    blocked: list[str] = []
+    failed: list[tuple[str, str]] = []
+    finished: list[str] = []
+    try:
+        await core.open("https://example.com")
+        browser_page = next(iter(core.pages.values()))
+        page = browser_page.page
+        page.set_default_timeout(15000)
+        page.set_default_navigation_timeout(15000)
+
+        def on_request_failed(request):
+            failure = request.failure or ""
+            failed.append((request.url, failure))
+            if "ERR_BLOCKED_BY_CLIENT" in failure:
+                blocked.append(request.url)
+
+        page.on("requestfailed", on_request_failed)
+        page.on("requestfinished", lambda request: finished.append(request.url))
+        for probe_url in (
+            "https://ad.doubleclick.net/cloakbrowser-ad-probe.gif",
+            "https://3lift.com/cloakbrowser-ad-probe.gif",
+            "https://scorecardresearch.com/cloakbrowser-ad-probe.gif",
+        ):
+            await page.evaluate(
+                """url => new Promise(resolve => {
+                    const img = document.createElement("img");
+                    img.src = `${url}?cloakbrowserSmoke=${Date.now()}`;
+                    img.onload = () => resolve();
+                    img.onerror = () => resolve();
+                    document.body.appendChild(img);
+                    setTimeout(resolve, 4000);
+                })""",
+                probe_url,
+            )
+            if blocked:
+                break
+        await page.wait_for_timeout(1000)
+        return {"blocked": blocked, "failed": failed, "finished": finished}
+    finally:
+        await core.close(delete_profile=True)
+
+
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(asyncio.run(main()))

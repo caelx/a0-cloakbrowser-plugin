@@ -18,11 +18,18 @@ from .xvfb import display_usable
 
 def collect_status(config: dict[str, Any] | None = None) -> dict[str, Any]:
     cfg = get_config(config)
+    manifest = load_manifest()
     return {
         "ok": True,
         "plugin": "cloakbrowser",
         "config": redacted_config(cfg),
-        "manifest": load_manifest(),
+        "manifest": manifest,
+        "setup": {
+            "installed": manifest.get("setup_status") == "setup",
+            "status": manifest.get("setup_status", "not_setup"),
+            "timestamp": manifest.get("setup_timestamp", ""),
+            "playwright_masquerade": manifest.get("playwright_shim", {}),
+        },
         "environment": {
             "python": platform.python_version(),
             "platform": platform.platform(),
@@ -39,8 +46,21 @@ def collect_status(config: dict[str, Any] | None = None) -> dict[str, Any]:
         },
         "cloakbrowser": cloakbrowser_status(),
         "patches": {
-            "playwright_shim": shim_status(),
-            "runtime_patch": runtime_patch_status(),
+            "playwright_shim": {
+                **shim_status(),
+                "setup_installed": bool(
+                    manifest.get("playwright_shim", {}).get("masquerade_path")
+                ),
+            },
+            "runtime_patch": {
+                **runtime_patch_status(),
+                "setup_installed": False,
+            },
+            "note": (
+                "Runtime and Playwright monkey patches are process-local; setup installs "
+                "dependencies and cache shims, while Browser tool processes apply patches at use time."
+            ),
+            "arg_filtering": "always_on",
         },
         "extensions": {
             "active_paths": active_extension_paths(cfg),

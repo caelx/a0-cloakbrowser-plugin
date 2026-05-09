@@ -7,8 +7,6 @@ from .config import apply_environment, get_config
 from .dependency_install import install_python_dependencies, install_system_dependencies
 from .extensions import install_configured_extensions, sync_browser_extension_paths
 from .install_manifest import load_manifest, mark_setup, record_warning, save_manifest
-from .playwright_shim import patch_playwright
-from .runtime_patch import apply_runtime_patch
 from .seed_playwright import ensure_masquerade
 from .xvfb import ensure_display
 
@@ -40,7 +38,12 @@ def setup_plugin(*, noninteractive: bool = False, skip_system_deps: bool = False
             "cache_path": cfg["runtime"]["cloakbrowser_cache_dir"],
         }
         masquerade = ensure_masquerade(binary)
-        manifest["playwright_shim"] = {"masquerade_path": str(masquerade)}
+        manifest["playwright_shim"] = {
+            "masquerade_path": str(masquerade),
+            "masquerade_target": binary,
+            "patching": "process-local",
+            "persistent_runtime_patch": False,
+        }
     except Exception as exc:
         record_warning(manifest, f"CloakBrowser binary setup failed: {exc}")
         save_manifest(manifest)
@@ -49,8 +52,18 @@ def setup_plugin(*, noninteractive: bool = False, skip_system_deps: bool = False
     display_result = ensure_display(cfg, manifest)
     extension_installs = install_configured_extensions(cfg, manifest)
     active_paths = sync_browser_extension_paths(cfg)
-    runtime_patch = apply_runtime_patch()
-    shim_patch = patch_playwright()
+    runtime_patch = {
+        "patching": "process-local",
+        "persistent": False,
+        "applied_in_setup": False,
+        "applies_when": "Browser tool execution or smoke test process",
+    }
+    shim_patch = {
+        "patching": "process-local",
+        "persistent": False,
+        "applied_in_setup": False,
+        "applies_when": "Browser tool execution or smoke test process",
+    }
 
     mark_setup(manifest)
     save_manifest(manifest)

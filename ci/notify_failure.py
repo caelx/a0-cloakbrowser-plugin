@@ -13,7 +13,7 @@ def main() -> int:
             "The CloakBrowser plugin upstream canary failed.",
             "",
             f"Workflow: {os.environ.get('GITHUB_SERVER_URL', '')}/{os.environ.get('GITHUB_REPOSITORY', '')}/actions/runs/{os.environ.get('GITHUB_RUN_ID', '')}",
-            f"Agent Zero image: {os.environ.get('AGENT_ZERO_IMAGE', 'agent0ai/agent-zero:latest')}",
+            f"Agent Zero image: {os.environ.get('CLOAKBROWSER_AGENT_ZERO_IMAGE') or os.environ.get('AGENT_ZERO_IMAGE', 'agent0ai/agent-zero:latest')}",
             f"CloakBrowser source: {os.environ.get('CLOAKBROWSER_SOURCE', 'pypi')}",
         ]
     )
