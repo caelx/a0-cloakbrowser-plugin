@@ -3,12 +3,19 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 from pathlib import Path
 
 
 def main() -> int:
+    sys.path.insert(0, "/git/agent-zero")
+    from helpers import plugins
+
+    plugin_dir = plugins.find_plugin_dir("cloakbrowser")
+    if not plugin_dir:
+        raise SystemExit("cloakbrowser plugin directory not found")
     result = subprocess.run(
-        ["python", "/a0/usr/plugins/cloakbrowser/execute.py", "uninstall", "--noninteractive"],
+        ["python", str(Path(plugin_dir) / "execute.py"), "uninstall", "--noninteractive"],
         check=False,
         capture_output=True,
         text=True,
