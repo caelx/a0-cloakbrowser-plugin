@@ -17,7 +17,7 @@ async def main() -> int:
             return kwargs
 
     agent = SimpleNamespace(context=SimpleNamespace(id="cloakbrowser-ci", log=Log()), agent_name="CI")
-    tool = Browser(agent=agent, name="browser", method=None, args={})
+    tool = Browser(agent=agent, name="browser", method=None, args={}, message="", loop_data=None)
     results = []
     upload = Path("/tmp/cloakbrowser-upload.txt")
     upload.write_text("upload", encoding="utf-8")

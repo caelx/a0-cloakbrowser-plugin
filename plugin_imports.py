@@ -9,17 +9,24 @@ from pathlib import Path
 def plugin_import(module: str):
     root = Path(__file__).resolve().parent
     ensure_agent_zero_path(root)
-    removed = False
+    removed_entries: list[tuple[int, str]] = []
     try:
-        if str(root) in sys.path:
-            sys.path.remove(str(root))
-            removed = True
+        for index, entry in reversed(list(enumerate(sys.path))):
+            try:
+                matches_root = Path(entry or ".").resolve() == root
+            except Exception:
+                matches_root = False
+            if entry == str(root) or matches_root:
+                removed_entries.append((index, entry))
+                sys.path.pop(index)
         return importlib.import_module(f"usr.plugins.cloakbrowser.{module}")
-    except ModuleNotFoundError:
-        pass
+    except ModuleNotFoundError as exc:
+        target = f"usr.plugins.cloakbrowser.{module}"
+        if exc.name not in {"usr", "usr.plugins", "usr.plugins.cloakbrowser", target}:
+            raise
     finally:
-        if removed:
-            sys.path.insert(0, str(root))
+        for index, entry in sorted(removed_entries):
+            sys.path.insert(min(index, len(sys.path)), entry)
     if module.startswith("helpers."):
         package = sys.modules.setdefault("cloakbrowser_local", types.ModuleType("cloakbrowser_local"))
         package.__path__ = [str(root)]
