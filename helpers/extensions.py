@@ -94,8 +94,7 @@ def install_configured_extensions(config: dict[str, Any] | None, manifest: dict[
 def sync_browser_extension_paths(config: dict[str, Any] | None = None) -> list[str]:
     active = active_extension_paths(config)
     try:
-        from helpers import plugins
-        from plugins._browser.helpers.config import get_browser_config
+        plugins, get_browser_config = _agent_zero_browser_config_helpers()
 
         browser_config = get_browser_config()
         current_paths = [str(Path(path).expanduser()) for path in browser_config.get("extension_paths", [])]
@@ -111,8 +110,7 @@ def sync_browser_extension_paths(config: dict[str, Any] | None = None) -> list[s
 def disable_managed_extension_paths() -> list[str]:
     removed: list[str] = []
     try:
-        from helpers import plugins
-        from plugins._browser.helpers.config import get_browser_config
+        plugins, get_browser_config = _agent_zero_browser_config_helpers()
 
         managed = {str(path) for path in managed_extension_paths().values()}
         browser_config = get_browser_config()
@@ -128,6 +126,16 @@ def disable_managed_extension_paths() -> list[str]:
     except Exception:
         pass
     return removed
+
+
+def _agent_zero_browser_config_helpers():
+    from .runtime_patch import _agent_zero_import_context
+
+    with _agent_zero_import_context():
+        from helpers import plugins
+        from plugins._browser.helpers.config import get_browser_config
+
+        return plugins, get_browser_config
 
 
 def list_extension_status(config: dict[str, Any] | None = None) -> list[dict[str, Any]]:

@@ -1,4 +1,3 @@
-import sys
 import types
 from pathlib import Path
 
@@ -12,12 +11,14 @@ def test_sync_browser_extension_paths_uses_upstream_browser_config(monkeypatch, 
     monkeypatch.setattr(extensions, "_is_loadable", lambda path: path == ubol)
 
     saved = {}
-    helpers_plugins = types.ModuleType("helpers.plugins")
-    helpers_plugins.save_plugin_config = lambda name, project, agent, cfg: saved.update(cfg)
-    browser_config_mod = types.ModuleType("plugins._browser.helpers.config")
-    browser_config_mod.get_browser_config = lambda: {"extension_paths": ["/external", str(ubol)]}
-    monkeypatch.setitem(sys.modules, "helpers.plugins", helpers_plugins)
-    monkeypatch.setitem(sys.modules, "plugins._browser.helpers.config", browser_config_mod)
+    helpers_plugins = types.SimpleNamespace(
+        save_plugin_config=lambda name, project, agent, cfg: saved.update(cfg)
+    )
+    monkeypatch.setattr(
+        extensions,
+        "_agent_zero_browser_config_helpers",
+        lambda: (helpers_plugins, lambda: {"extension_paths": ["/external", str(ubol)]}),
+    )
 
     active = extensions.sync_browser_extension_paths(
         {
@@ -31,3 +32,35 @@ def test_sync_browser_extension_paths_uses_upstream_browser_config(monkeypatch, 
 
     assert active == [str(ubol)]
     assert saved["extension_paths"] == ["/external", str(ubol)]
+
+
+def test_disable_managed_extension_paths_removes_upstream_browser_config(monkeypatch, tmp_path):
+    ubol = tmp_path / "ubol"
+    cookies = tmp_path / "cookies"
+    bpc = tmp_path / "bpc"
+    monkeypatch.setattr(
+        extensions,
+        "managed_extension_paths",
+        lambda: {
+            "ublock_origin_lite": ubol,
+            "i_still_dont_care_about_cookies": cookies,
+            "bypass_paywalls_clean": bpc,
+        },
+    )
+    saved = {}
+    helpers_plugins = types.SimpleNamespace(
+        save_plugin_config=lambda name, project, agent, cfg: saved.update(cfg)
+    )
+    monkeypatch.setattr(
+        extensions,
+        "_agent_zero_browser_config_helpers",
+        lambda: (
+            helpers_plugins,
+            lambda: {"extension_paths": [str(ubol), "/external", str(cookies)]},
+        ),
+    )
+
+    removed = extensions.disable_managed_extension_paths()
+
+    assert removed == [str(ubol), str(cookies)]
+    assert saved["extension_paths"] == ["/external"]
