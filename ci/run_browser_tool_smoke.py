@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -37,30 +38,64 @@ async def main() -> int:
     </form>
     <script>window.submitted=0;</script>
     """
+    async def call(**kwargs):
+        response = await tool.execute(**kwargs)
+        results.append({"call": kwargs, "message": response.message, "break_loop": response.break_loop})
+        if response.message.startswith("Browser ") and " failed:" in response.message:
+            Path("artifacts").mkdir(exist_ok=True)
+            Path("artifacts/browser-tool-results.json").write_text(json.dumps(results, indent=2) + "\n", encoding="utf-8")
+            raise AssertionError(response.message)
+        return response
+
+    async def resolve_refs(*element_ids: str) -> dict[str, str]:
+        await call(action="content", selectors=[f"#{element_id}" for element_id in element_ids])
+        refs: dict[str, str] = {}
+        for candidate in range(1, 80):
+            response = await tool.execute(action="detail", ref=candidate)
+            if response.message.startswith("Browser ") and " failed:" in response.message:
+                continue
+            try:
+                detail = json.loads(response.message)
+            except json.JSONDecodeError:
+                continue
+            state = detail.get("state") or {}
+            dom = detail.get("dom") or ""
+            found_id = state.get("id") or ""
+            if not found_id and isinstance(dom, str):
+                match = re.search(r'\bid=["\\\']?([A-Za-z0-9_-]+)', dom)
+                found_id = match.group(1) if match else ""
+            if found_id in element_ids:
+                refs[found_id] = str(detail.get("referenceId") or candidate)
+            if len(refs) == len(element_ids):
+                return refs
+        missing = sorted(set(element_ids) - set(refs))
+        raise AssertionError(f"Missing Browser refs for: {missing}; resolved={refs}")
+
+    await call(action="open", url=html)
+    await call(action="state")
+    await call(action="list")
+    refs = await resolve_refs("a", "b", "t", "c", "s", "u", "d", "target", "submit")
+
     calls = [
-        {"action": "open", "url": html},
-        {"action": "state"},
-        {"action": "list"},
-        {"action": "content"},
-        {"action": "detail", "ref": 1},
-        {"action": "click", "ref": 2},
-        {"action": "type", "ref": 3, "text": "abc"},
-        {"action": "submit", "ref": 10},
-        {"action": "type_submit", "ref": 3, "text": "xyz"},
-        {"action": "scroll", "ref": 8},
+        {"action": "detail", "ref": refs["a"]},
+        {"action": "click", "ref": refs["b"]},
+        {"action": "type", "ref": refs["t"], "text": "abc"},
+        {"action": "submit", "ref": refs["submit"]},
+        {"action": "type_submit", "ref": refs["t"], "text": "xyz"},
+        {"action": "scroll", "ref": refs["d"]},
         {"action": "evaluate", "script": "({width: window.innerWidth, clicked: window.clicked})"},
         {"action": "key_chord", "keys": ["Control", "A"]},
-        {"action": "hover", "ref": 2},
-        {"action": "double_click", "ref": 2},
-        {"action": "right_click", "ref": 2},
-        {"action": "drag", "ref": 8, "target_ref": 9},
+        {"action": "hover", "ref": refs["b"]},
+        {"action": "double_click", "ref": refs["b"]},
+        {"action": "right_click", "ref": refs["b"]},
+        {"action": "drag", "ref": refs["d"], "target_ref": refs["target"]},
         {"action": "wheel", "x": 200, "y": 200, "delta_y": 100},
         {"action": "keyboard", "key": "Escape"},
         {"action": "clipboard", "event_type": "paste", "text": "clip"},
         {"action": "set_viewport", "width": 1920, "height": 1080},
-        {"action": "select_option", "ref": 5, "value": "b"},
-        {"action": "set_checked", "ref": 4, "checked": True},
-        {"action": "upload_file", "ref": 6, "path": str(upload)},
+        {"action": "select_option", "ref": refs["s"], "value": "b"},
+        {"action": "set_checked", "ref": refs["c"], "checked": True},
+        {"action": "upload_file", "ref": refs["u"], "path": str(upload)},
         {"action": "mouse", "event_type": "move", "x": 10, "y": 10},
         {"action": "multi", "calls": [{"action": "state"}, {"action": "evaluate", "script": "window.innerWidth"}]},
         {"action": "screenshot"},
@@ -74,10 +109,7 @@ async def main() -> int:
         {"action": "close_all"},
     ]
     for kwargs in calls:
-        response = await tool.execute(**kwargs)
-        results.append({"call": kwargs, "message": response.message, "break_loop": response.break_loop})
-        if response.message.startswith("Browser ") and " failed:" in response.message:
-            raise AssertionError(response.message)
+        await call(**kwargs)
     Path("artifacts").mkdir(exist_ok=True)
     Path("artifacts/browser-tool-results.json").write_text(json.dumps(results, indent=2) + "\n", encoding="utf-8")
     return 0
