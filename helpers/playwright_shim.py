@@ -159,7 +159,13 @@ def should_patch_launch(kwargs: dict[str, Any]) -> bool:
     if not executable:
         return True
     lowered = executable.lower()
-    return "cloakbrowser" in lowered or "chromium-cloakbrowser" in lowered
+    normalized = lowered.replace("\\", "/")
+    return (
+        "cloakbrowser" in normalized
+        or "chromium-cloakbrowser" in normalized
+        or "/plugins/_browser/playwright/" in normalized
+        or "/usr/plugins/_browser/playwright/" in normalized
+    )
 
 
 def redact_args(args: list[str]) -> list[str]:
