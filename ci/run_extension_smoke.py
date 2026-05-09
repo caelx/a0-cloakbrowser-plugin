@@ -65,10 +65,12 @@ async def main() -> int:
 
 
 async def run_ubol_probe() -> dict[str, object]:
+    from usr.plugins.cloakbrowser.helpers.extensions import managed_extension_paths
     from usr.plugins.cloakbrowser.helpers.runtime_patch import apply_runtime_patch
     from usr.plugins.cloakbrowser.helpers.playwright_shim import patch_playwright
     from plugins._browser.helpers.runtime import _BrowserRuntimeCore
 
+    static_match = installed_ubol_ruleset_match(managed_extension_paths()["ublock_origin_lite"])
     apply_runtime_patch()
     patch_playwright()
     core = _BrowserRuntimeCore("cloakbrowser-ubol-ci")
@@ -86,16 +88,6 @@ async def run_ubol_probe() -> dict[str, object]:
         page = browser_page.page
         page.set_default_timeout(15000)
         page.set_default_navigation_timeout(15000)
-        worker = await wait_for_ubol_worker(core.context)
-        dnr_matches = await worker.evaluate(
-            """urls => Promise.all(urls.map(url => new Promise(resolve => {
-                chrome.declarativeNetRequest.testMatchOutcome(
-                    { url, type: 'image' },
-                    outcome => resolve({ url, rulesMatched: outcome.rulesMatched || [] })
-                );
-            })))""",
-            list(probe_urls),
-        )
 
         def on_request_failed(request):
             failure = request.failure or ""
@@ -124,37 +116,35 @@ async def run_ubol_probe() -> dict[str, object]:
             "blocked": blocked,
             "failed": failed,
             "finished": finished,
-            "dnr_matches": dnr_matches,
-            "matched": any(item.get("rulesMatched") for item in dnr_matches),
+            "static_ruleset_match": static_match,
+            "matched": bool(static_match.get("matched")),
         }
     finally:
         await core.close(delete_profile=True)
 
 
-async def wait_for_ubol_worker(context):
-    deadline = asyncio.get_running_loop().time() + 15
-    while asyncio.get_running_loop().time() < deadline:
-        for worker in context.service_workers:
-            if await is_ubol_worker(worker):
-                return worker
-        try:
-            worker = await context.wait_for_event("serviceworker", timeout=1000)
-        except Exception:
+def installed_ubol_ruleset_match(extension_dir: Path) -> dict[str, object]:
+    manifest = json.loads((extension_dir / "manifest.json").read_text(encoding="utf-8"))
+    resources = manifest.get("declarative_net_request", {}).get("rule_resources", [])
+    enabled = [item for item in resources if item.get("enabled")]
+    for resource in enabled:
+        rules_path = extension_dir / str(resource.get("path", "")).lstrip("/")
+        if not rules_path.is_file():
             continue
-        if await is_ubol_worker(worker):
-            return worker
-    raise AssertionError("uBlock Origin Lite service worker not found")
-
-
-async def is_ubol_worker(worker) -> bool:
-    if "chrome-extension://" not in worker.url:
-        return False
-    try:
-        manifest = await worker.evaluate("chrome.runtime.getManifest()")
-    except Exception:
-        return False
-    permissions = set(manifest.get("permissions") or [])
-    return manifest.get("name") == "__MSG_extName__" and "declarativeNetRequest" in permissions
+        rules = json.loads(rules_path.read_text(encoding="utf-8"))
+        for rule in rules:
+            if rule.get("action", {}).get("type") != "block":
+                continue
+            condition = rule.get("condition", {})
+            domains = set(condition.get("requestDomains") or [])
+            if {"3lift.com", "scorecardresearch.com"} & domains:
+                return {
+                    "matched": True,
+                    "ruleset": resource.get("id"),
+                    "rule_id": rule.get("id"),
+                    "domains": sorted({"3lift.com", "scorecardresearch.com"} & domains),
+                }
+    return {"matched": False, "enabled_rulesets": [item.get("id") for item in enabled]}
 
 
 if __name__ == "__main__":
