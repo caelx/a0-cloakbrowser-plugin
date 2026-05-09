@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 import random
+from contextvars import ContextVar
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +19,7 @@ _STATE: dict[str, Any] = {
     "sync_originals": {},
     "last_launch": {},
 }
+_IN_CLOAK_LAUNCH: ContextVar[bool] = ContextVar("cloakbrowser_in_cloak_launch", default=False)
 
 
 def patch_playwright() -> dict[str, Any]:
@@ -155,6 +157,8 @@ def should_patch_launch(kwargs: dict[str, Any]) -> bool:
     cfg = get_config()
     if not cfg["runtime"]["enabled"]:
         return False
+    if _IN_CLOAK_LAUNCH.get():
+        return False
     executable = str(kwargs.get("executable_path") or "").strip()
     if not executable:
         return True
@@ -217,27 +221,43 @@ def _patch_class(cls: type, *, async_mode: bool) -> None:
 async def _cloak_launch_async(kwargs: dict[str, Any]):
     from cloakbrowser import launch_async
 
-    return await launch_async(**_cloak_kwargs(kwargs))
+    token = _IN_CLOAK_LAUNCH.set(True)
+    try:
+        return await launch_async(**_cloak_kwargs(kwargs))
+    finally:
+        _IN_CLOAK_LAUNCH.reset(token)
 
 
 def _cloak_launch_sync(kwargs: dict[str, Any]):
     from cloakbrowser import launch
 
-    return launch(**_cloak_kwargs(kwargs))
+    token = _IN_CLOAK_LAUNCH.set(True)
+    try:
+        return launch(**_cloak_kwargs(kwargs))
+    finally:
+        _IN_CLOAK_LAUNCH.reset(token)
 
 
 async def _cloak_launch_persistent_async(user_data_dir: str | Path, kwargs: dict[str, Any]):
     from cloakbrowser import launch_persistent_context_async
 
     cleaned = _cloak_kwargs(kwargs)
-    return await launch_persistent_context_async(user_data_dir=user_data_dir, **cleaned)
+    token = _IN_CLOAK_LAUNCH.set(True)
+    try:
+        return await launch_persistent_context_async(user_data_dir=user_data_dir, **cleaned)
+    finally:
+        _IN_CLOAK_LAUNCH.reset(token)
 
 
 def _cloak_launch_persistent_sync(user_data_dir: str | Path, kwargs: dict[str, Any]):
     from cloakbrowser import launch_persistent_context
 
     cleaned = _cloak_kwargs(kwargs)
-    return launch_persistent_context(user_data_dir=user_data_dir, **cleaned)
+    token = _IN_CLOAK_LAUNCH.set(True)
+    try:
+        return launch_persistent_context(user_data_dir=user_data_dir, **cleaned)
+    finally:
+        _IN_CLOAK_LAUNCH.reset(token)
 
 
 def _cloak_kwargs(kwargs: dict[str, Any]) -> dict[str, Any]:
