@@ -19,7 +19,7 @@ jobs:
       CLOAKBROWSER_SOURCE: ${{ matrix.cloakbrowser_source }}
       AGENT_ZERO_IMAGE: agent0ai/agent-zero:latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Use CloakBrowser GitHub main
         if: matrix.cloakbrowser_source == 'github-main'
         run: |
