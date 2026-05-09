@@ -1,4 +1,4 @@
-# CloakBrowser Agent Zero Plugin
+# Agent-Zero CloakBrowser Plugin
 
 CloakBrowser-backed overlay for Agent Zero's built-in Browser tool.
 
