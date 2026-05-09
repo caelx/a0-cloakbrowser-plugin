@@ -34,7 +34,31 @@ def apply_runtime_patch() -> dict[str, Any]:
         from .config import get_config
 
         cfg = get_config()
-        await _STATE["original_start"](self)
+        restore_page_close = None
+        if cfg["advanced"]["preserve_headed_placeholder_page"] and cfg["runtime"]["headed"]:
+            try:
+                from playwright.async_api import Page
+
+                original_page_close = Page.close
+
+                async def _close_preserving_sole_placeholder(page, *args, **kwargs):
+                    try:
+                        context_pages = list(getattr(page.context, "pages", []) or [])
+                        if page.url == "about:blank" and len(context_pages) == 1:
+                            return None
+                    except Exception:
+                        pass
+                    return await original_page_close(page, *args, **kwargs)
+
+                Page.close = _close_preserving_sole_placeholder
+                restore_page_close = lambda: setattr(Page, "close", original_page_close)
+            except Exception:
+                restore_page_close = None
+        try:
+            await _STATE["original_start"](self)
+        finally:
+            if restore_page_close:
+                restore_page_close()
         if not cfg["advanced"]["preserve_headed_placeholder_page"]:
             return
         if not cfg["runtime"]["headed"]:
