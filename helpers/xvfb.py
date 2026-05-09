@@ -42,8 +42,7 @@ def ensure_display(config: dict[str, Any], manifest: dict[str, Any]) -> dict[str
         if start_result["ok"]:
             os.environ["DISPLAY"] = display
             manifest["display"] = display
-            manifest["xvfb"] = start_result
-            manifest["xvfb"]["attempts"] = attempts
+            manifest["xvfb"] = {**start_result, "attempts": list(attempts)}
             return start_result
     return {
         "ok": False,

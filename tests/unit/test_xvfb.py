@@ -1,3 +1,5 @@
+import json
+
 from helpers import xvfb
 
 
@@ -37,3 +39,4 @@ def test_ensure_display_allocates_alternate_when_preferred_socket_unusable(monke
     assert starts == [":98"]
     assert manifest["display"] == ":98"
     assert manifest["xvfb"]["attempts"][0]["display"] == ":99"
+    json.dumps(manifest)
