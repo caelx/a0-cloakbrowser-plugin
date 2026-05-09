@@ -74,12 +74,15 @@ def cloakbrowser_status() -> dict[str, Any]:
 
 def browser_status() -> dict[str, Any]:
     try:
-        from helpers import plugins
-        from plugins._browser.helpers.config import build_browser_launch_config, get_browser_config
+        from .runtime_patch import _agent_zero_import_context
 
-        enabled = "_browser" in plugins.get_enabled_plugins(None)
-        browser_config = get_browser_config()
-        launch_config = build_browser_launch_config(browser_config)
+        with _agent_zero_import_context():
+            from helpers import plugins
+            from plugins._browser.helpers.config import build_browser_launch_config, get_browser_config
+
+            enabled = "_browser" in plugins.get_enabled_plugins(None)
+            browser_config = get_browser_config()
+            launch_config = build_browser_launch_config(browser_config)
         return {
             "upstream_available": True,
             "builtin_browser_enabled": enabled,

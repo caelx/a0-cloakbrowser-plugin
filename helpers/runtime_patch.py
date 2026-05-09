@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import sys
+from contextlib import contextmanager
+from pathlib import Path
 from typing import Any
 
 _STATE: dict[str, Any] = {
@@ -14,7 +17,8 @@ def apply_runtime_patch() -> dict[str, Any]:
     if _STATE["patched"]:
         return status()
     try:
-        from plugins._browser.helpers import runtime
+        with _agent_zero_import_context():
+            from plugins._browser.helpers import runtime
     except Exception as exc:
         _STATE["error"] = str(exc)
         return status()
@@ -30,7 +34,31 @@ def apply_runtime_patch() -> dict[str, Any]:
         from .config import get_config
 
         cfg = get_config()
-        await _STATE["original_start"](self)
+        restore_page_close = None
+        if cfg["advanced"]["preserve_headed_placeholder_page"] and cfg["runtime"]["headed"]:
+            try:
+                from playwright.async_api import Page
+
+                original_page_close = Page.close
+
+                async def _close_preserving_sole_placeholder(page, *args, **kwargs):
+                    try:
+                        context_pages = list(getattr(page.context, "pages", []) or [])
+                        if page.url == "about:blank" and len(context_pages) == 1:
+                            return None
+                    except Exception:
+                        pass
+                    return await original_page_close(page, *args, **kwargs)
+
+                Page.close = _close_preserving_sole_placeholder
+                restore_page_close = lambda: setattr(Page, "close", original_page_close)
+            except Exception:
+                restore_page_close = None
+        try:
+            await _STATE["original_start"](self)
+        finally:
+            if restore_page_close:
+                restore_page_close()
         if not cfg["advanced"]["preserve_headed_placeholder_page"]:
             return
         if not cfg["runtime"]["headed"]:
@@ -54,7 +82,8 @@ def unpatch_runtime() -> dict[str, Any]:
     if not _STATE["patched"]:
         return status()
     try:
-        from plugins._browser.helpers import runtime
+        with _agent_zero_import_context():
+            from plugins._browser.helpers import runtime
 
         core = runtime._BrowserRuntimeCore
         if _STATE["original_shadow_dom_script"] is not None:
@@ -73,3 +102,49 @@ def status() -> dict[str, Any]:
         "patching": "process-local",
         "error": _STATE.get("error", ""),
     }
+
+
+@contextmanager
+def _agent_zero_import_context():
+    from .config import plugin_dir
+
+    root = plugin_dir().resolve()
+    removed_entries: list[tuple[int, str]] = []
+    removed_modules: dict[str, Any] = {}
+    for name, module in list(sys.modules.items()):
+        if name != "helpers" and not name.startswith("helpers."):
+            continue
+        module_file = Path(getattr(module, "__file__", "") or "")
+        if not module_file:
+            continue
+        try:
+            if not module_file.resolve().is_relative_to(root):
+                continue
+        except Exception:
+            continue
+        removed_modules[name] = module
+        sys.modules.pop(name, None)
+
+    for index, entry in reversed(list(enumerate(sys.path))):
+        try:
+            matches_root = Path(entry or ".").resolve() == root
+        except Exception:
+            matches_root = False
+        if entry == str(root) or matches_root:
+            removed_entries.append((index, entry))
+            sys.path.pop(index)
+
+    for parent in root.parents:
+        if (parent / "plugins" / "_browser").is_dir() and (parent / "helpers" / "tool.py").is_file():
+            parent_str = str(parent)
+            if parent_str not in sys.path:
+                sys.path.insert(0, parent_str)
+            break
+
+    try:
+        yield
+    finally:
+        for index, entry in sorted(removed_entries):
+            sys.path.insert(min(index, len(sys.path)), entry)
+        for name, module in removed_modules.items():
+            sys.modules.setdefault(name, module)
