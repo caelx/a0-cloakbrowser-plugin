@@ -24,7 +24,15 @@ repo = "'"$repo"'"
 if not plugins.find_plugin_dir("cloakbrowser"):
     print(install_from_git(repo, plugin_name="cloakbrowser"))
 PY
-    cd /a0/usr/plugins/cloakbrowser
+    plugin_dir="$(python - <<PY
+import sys
+sys.path.insert(0, "/git/agent-zero")
+from helpers import plugins
+print(plugins.find_plugin_dir("cloakbrowser") or "")
+PY
+)"
+    test -n "$plugin_dir"
+    cd "$plugin_dir"
     ln -sfn /artifacts artifacts
     python execute.py setup --noninteractive
     python execute.py status > /artifacts/plugin-status.json
