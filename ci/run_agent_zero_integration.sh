@@ -12,6 +12,7 @@ docker run --rm --shm-size=2g \
   "$image" \
   bash -lc '
     set -euo pipefail
+    . /ins/setup_venv.sh local
     mkdir -p /workspace /artifacts
     cd /workspace
     python - <<PY
@@ -24,6 +25,7 @@ if not plugins.find_plugin_dir("cloakbrowser"):
     print(install_from_git(repo, plugin_name="cloakbrowser"))
 PY
     cd /a0/usr/plugins/cloakbrowser
+    ln -sfn /artifacts artifacts
     python execute.py setup --noninteractive
     python execute.py status > /artifacts/plugin-status.json
     python ci/collect_versions.py
