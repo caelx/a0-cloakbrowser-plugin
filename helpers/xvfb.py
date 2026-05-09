@@ -55,8 +55,9 @@ def start_xvfb(display: str, width: int, height: int, depth: int) -> dict[str, A
     if supervisor["attempted"]:
         if supervisor["ok"]:
             return supervisor
-        if supervisor.get("supervisor_present"):
-            return supervisor
+        direct = start_xvfb_process(display, width, height, depth)
+        direct["supervisor_attempt"] = supervisor
+        return direct
 
     return start_xvfb_process(display, width, height, depth)
 

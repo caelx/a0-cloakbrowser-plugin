@@ -86,16 +86,20 @@ def _agent_zero_import_context():
 
     root = plugin_dir().resolve()
     removed_entries: list[tuple[int, str]] = []
-    prior_helpers = sys.modules.get("helpers")
-    helpers_file = Path(getattr(prior_helpers, "__file__", "") or "")
-    removed_helpers = False
-    if prior_helpers is not None and helpers_file:
+    removed_modules: dict[str, Any] = {}
+    for name, module in list(sys.modules.items()):
+        if name != "helpers" and not name.startswith("helpers."):
+            continue
+        module_file = Path(getattr(module, "__file__", "") or "")
+        if not module_file:
+            continue
         try:
-            removed_helpers = helpers_file.resolve().is_relative_to(root)
+            if not module_file.resolve().is_relative_to(root):
+                continue
         except Exception:
-            removed_helpers = False
-    if removed_helpers:
-        sys.modules.pop("helpers", None)
+            continue
+        removed_modules[name] = module
+        sys.modules.pop(name, None)
 
     for index, entry in reversed(list(enumerate(sys.path))):
         try:
@@ -118,5 +122,5 @@ def _agent_zero_import_context():
     finally:
         for index, entry in sorted(removed_entries):
             sys.path.insert(min(index, len(sys.path)), entry)
-        if removed_helpers and prior_helpers is not None and "helpers" not in sys.modules:
-            sys.modules["helpers"] = prior_helpers
+        for name, module in removed_modules.items():
+            sys.modules.setdefault(name, module)

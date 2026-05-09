@@ -7,6 +7,7 @@ import re
 import sys
 from pathlib import Path
 from types import SimpleNamespace
+from urllib.parse import quote
 
 
 async def main() -> int:
@@ -22,22 +23,27 @@ async def main() -> int:
     results = []
     upload = Path("/tmp/cloakbrowser-upload.txt")
     upload.write_text("upload", encoding="utf-8")
-    html = """data:text/html,
-    <title>CloakBrowser CI</title>
-    <form id=f onsubmit="window.submitted=1; return false">
-      <a id=a href="#next">link</a>
-      <button id=b type=button onclick="window.clicked=(window.clicked||0)+1">Click</button>
-      <input id=t name=t>
-      <input id=c type=checkbox>
-      <select id=s><option value=a>A</option><option value=b>B</option></select>
-      <input id=u type=file>
-      <div id=e contenteditable=true>edit</div>
-      <div id=d draggable=true style="width:60px;height:30px;background:#ddd">drag</div>
-      <div id=target style="width:80px;height:40px;background:#bbb">target</div>
-      <button id=submit type=submit>Submit</button>
-    </form>
-    <script>window.submitted=0;</script>
+    markup = """
+    <html>
+      <head><title>CloakBrowser CI</title></head>
+      <body>
+        <form id=f onsubmit="window.submitted=1; return false">
+          <a id=a href="#next">link</a>
+          <button id=b type=button onclick="window.clicked=(window.clicked||0)+1">Click</button>
+          <input id=t name=t>
+          <input id=c type=checkbox>
+          <select id=s><option value=a>A</option><option value=b>B</option></select>
+          <input id=u type=file>
+          <div id=e contenteditable=true>edit</div>
+          <div id=d draggable=true style="width:60px;height:30px;background:#ddd">drag</div>
+          <div id=target style="width:80px;height:40px;background:#bbb">target</div>
+          <button id=submit type=submit>Submit</button>
+        </form>
+        <script>window.submitted=0;</script>
+      </body>
+    </html>
     """
+    html = "data:text/html;charset=utf-8," + quote(markup)
     async def call(**kwargs):
         response = await tool.execute(**kwargs)
         results.append({"call": kwargs, "message": response.message, "break_loop": response.break_loop})
@@ -110,7 +116,7 @@ async def main() -> int:
         {"action": "mouse", "event_type": "move", "x": 10, "y": 10},
         {"action": "multi", "calls": [{"action": "state"}, {"action": "evaluate", "script": "window.innerWidth"}]},
         {"action": "screenshot"},
-        {"action": "navigate", "url": "data:text/html,<title>next</title>"},
+        {"action": "navigate", "url": "data:text/html;charset=utf-8," + quote("<title>next</title>")},
         {"action": "back"},
         {"action": "forward"},
         {"action": "reload"},
