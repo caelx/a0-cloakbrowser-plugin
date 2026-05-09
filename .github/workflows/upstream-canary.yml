@@ -25,7 +25,7 @@ jobs:
         run: |
           echo 'cloakbrowser[geoip] @ git+https://github.com/CloakHQ/CloakBrowser.git@main' > ci/requirements-cloakbrowser.txt
       - run: bash ci/run_agent_zero_integration.sh
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: upstream-canary-${{ matrix.cloakbrowser_source }}

@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v7
       - run: uv run --with pytest python -m pytest -s tests/unit
 
   integration:
@@ -19,7 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - run: bash ci/run_agent_zero_integration.sh
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: cloakbrowser-integration-artifacts
