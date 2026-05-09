@@ -1,0 +1,9 @@
+name: cloakbrowser
+title: CloakBrowser
+description: CloakBrowser-backed overlay for Agent Zero's Browser tool.
+version: 1.0.0
+settings_sections:
+  - external
+per_project_config: false
+per_agent_config: false
+always_enabled: false

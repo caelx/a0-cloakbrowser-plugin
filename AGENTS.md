@@ -1,0 +1,13 @@
+# Agent Preferences
+
+- Be concise.
+- Use this file as workspace memory.
+- Record only short durable lessons here.
+
+## Project Notes
+
+- This repo is a root-layout Agent Zero community plugin; `plugin.yaml` must stay at the repository root.
+- The plugin overlays upstream `_browser` and must delegate Browser actions instead of copying the action stack.
+- Heavy setup belongs in `execute.py setup`, never in `hooks.install()`.
+- Keep browser profiles, downloads, screenshots, cookies, and local storage untouched during uninstall.
+- Runtime code must not import test, CI, or planning files.

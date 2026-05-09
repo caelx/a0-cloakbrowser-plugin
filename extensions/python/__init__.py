@@ -1,0 +1,1 @@
+"""CloakBrowser plugin Python extensions."""

@@ -1,0 +1,76 @@
+<html>
+<head>
+  <title>CloakBrowser Settings</title>
+</head>
+<body>
+  <div x-data>
+    <template x-if="config">
+      <div class="cloakbrowser-config">
+        <label>
+          <span>Enabled</span>
+          <input type="checkbox" x-model="config.runtime.enabled" />
+        </label>
+        <label>
+          <span>Headed</span>
+          <input type="checkbox" x-model="config.runtime.headed" />
+        </label>
+        <label>
+          <span>Display</span>
+          <input type="text" x-model="config.runtime.display" />
+        </label>
+        <label>
+          <span>Viewport width</span>
+          <input type="number" x-model.number="config.runtime.viewport_width" />
+        </label>
+        <label>
+          <span>Viewport height</span>
+          <input type="number" x-model.number="config.runtime.viewport_height" />
+        </label>
+        <label>
+          <span>Humanize</span>
+          <input type="checkbox" x-model="config.humanization.humanize" />
+        </label>
+        <label>
+          <span>Human preset</span>
+          <select x-model="config.humanization.human_preset">
+            <option value="default">default</option>
+            <option value="careful">careful</option>
+          </select>
+        </label>
+        <label>
+          <span>Proxy</span>
+          <input type="text" x-model="config.network_location.proxy" autocomplete="off" />
+        </label>
+        <label>
+          <span>uBlock Origin Lite</span>
+          <input type="checkbox" x-model="config.extensions.enable_ublock_origin_lite" />
+        </label>
+        <label>
+          <span>I still don't care about cookies</span>
+          <input type="checkbox" x-model="config.extensions.enable_i_still_dont_care_about_cookies" />
+        </label>
+        <label>
+          <span>Bypass Paywalls Clean</span>
+          <input type="checkbox" x-model="config.extensions.enable_bypass_paywalls_clean" />
+        </label>
+      </div>
+    </template>
+  </div>
+  <style>
+    .cloakbrowser-config {
+      display: grid;
+      gap: 12px;
+    }
+    .cloakbrowser-config label {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(160px, 240px);
+      align-items: center;
+      gap: 12px;
+    }
+    .cloakbrowser-config input,
+    .cloakbrowser-config select {
+      min-height: 34px;
+    }
+  </style>
+</body>
+</html>

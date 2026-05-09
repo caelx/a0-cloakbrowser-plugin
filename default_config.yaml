@@ -1,0 +1,72 @@
+runtime:
+  enabled: true
+  headed: true
+  display: ":99"
+  auto_start_xvfb: true
+  reuse_existing_display: true
+  display_width: 1920
+  display_height: 1080
+  display_depth: 24
+  viewport_width: 1920
+  viewport_height: 1080
+  cloakbrowser_cache_dir: "/opt/cloakbrowser"
+  cloakbrowser_auto_update: false
+
+humanization:
+  humanize: true
+  human_preset: "default"
+
+identity:
+  fingerprint_seed_mode: "random"
+  fingerprint_seed: ""
+  fingerprint_platform: ""
+  fingerprint_noise: false
+  fingerprint_screen_width: 1920
+  fingerprint_screen_height: 1080
+  storage_quota_mb: ""
+
+network_location:
+  proxy: ""
+  geoip: true
+  timezone: ""
+  locale: ""
+  webrtc_ip_mode: "auto"
+  webrtc_ip: ""
+
+advanced:
+  extra_args: []
+  filter_default_playwright_args: true
+  disable_shadow_dom_init_patch: true
+  preserve_headed_placeholder_page: true
+  patch_runtime_file_if_needed: true
+
+extensions:
+  install_ublock_origin_lite: true
+  enable_ublock_origin_lite: true
+  update_ublock_origin_lite_on_setup: false
+  install_i_still_dont_care_about_cookies: true
+  enable_i_still_dont_care_about_cookies: true
+  update_i_still_dont_care_about_cookies_on_setup: false
+  install_bypass_paywalls_clean: false
+  enable_bypass_paywalls_clean: false
+  update_bypass_paywalls_clean_on_setup: false
+
+ublock_origin_lite:
+  filtering_mode: "complete"
+  strict_block_mode: true
+  enabled_rulesets:
+    - ublock-filters
+    - easylist
+    - easyprivacy
+    - pgl
+    - adguard-spyware-url
+    - block-lan
+    - ublock-badware
+    - urlhaus-full
+    - annoyances-ai
+    - annoyances-cookies
+    - annoyances-notifications
+    - annoyances-others
+    - annoyances-overlays
+    - annoyances-social
+    - annoyances-widgets

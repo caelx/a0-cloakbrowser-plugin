@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv run --with pytest python -m pytest -s tests/unit
+
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash ci/run_agent_zero_integration.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cloakbrowser-integration-artifacts
+          path: artifacts/

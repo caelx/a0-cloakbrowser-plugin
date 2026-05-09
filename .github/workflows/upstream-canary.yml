@@ -1,0 +1,37 @@
+name: Upstream Canary
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+  repository_dispatch:
+    types: [cloakbrowser-upstream-canary]
+
+jobs:
+  canary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      matrix:
+        cloakbrowser_source: [pypi, github-main]
+    env:
+      CLOAKBROWSER_SOURCE: ${{ matrix.cloakbrowser_source }}
+      AGENT_ZERO_IMAGE: agent0ai/agent-zero:latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use CloakBrowser GitHub main
+        if: matrix.cloakbrowser_source == 'github-main'
+        run: |
+          echo 'cloakbrowser[geoip] @ git+https://github.com/CloakHQ/CloakBrowser.git@main' > ci/requirements-cloakbrowser.txt
+      - run: bash ci/run_agent_zero_integration.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: upstream-canary-${{ matrix.cloakbrowser_source }}
+          path: artifacts/
+      - name: Notify failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python ci/notify_failure.py

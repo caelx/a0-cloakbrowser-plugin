@@ -1,0 +1,50 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import asyncio
+import json
+import sys
+from pathlib import Path
+
+
+async def main() -> int:
+    sys.path.insert(0, "/git/agent-zero")
+    from plugins._browser.helpers.runtime import _BrowserRuntimeCore
+    from usr.plugins.cloakbrowser.helpers.runtime_patch import apply_runtime_patch
+    from usr.plugins.cloakbrowser.helpers.playwright_shim import patch_playwright, status
+
+    apply_runtime_patch()
+    patch_playwright()
+    core = _BrowserRuntimeCore("cloakbrowser-detection-ci")
+    results = {}
+    try:
+        opened = await core.open("data:text/html,<title>detection</title>")
+        bid = opened["id"]
+        results = await core.evaluate(
+            bid,
+            """({
+              webdriver: navigator.webdriver,
+              userAgent: navigator.userAgent,
+              hasChrome: Boolean(window.chrome),
+              plugins: navigator.plugins.length,
+              innerWidth: window.innerWidth,
+              innerHeight: window.innerHeight,
+              screenWidth: screen.width,
+              screenHeight: screen.height
+            })""",
+        )
+        results["shim"] = status()
+        await core.close(delete_profile=False)
+    finally:
+        Path("artifacts").mkdir(exist_ok=True)
+        Path("artifacts/local-detection-results.json").write_text(json.dumps(results, indent=2) + "\n", encoding="utf-8")
+    value = results.get("result", {})
+    assert value.get("webdriver") is not True
+    assert "HeadlessChrome" not in value.get("userAgent", "")
+    assert value.get("innerWidth") == 1920
+    assert value.get("screenWidth") == 1920
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(asyncio.run(main()))
