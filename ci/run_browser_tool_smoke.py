@@ -48,9 +48,18 @@ async def main() -> int:
         return response
 
     async def resolve_refs(*element_ids: str) -> dict[str, str]:
-        await call(action="content", selectors=[f"#{element_id}" for element_id in element_ids])
+        content_response = await call(action="content", selectors=[f"#{element_id}" for element_id in element_ids])
         refs: dict[str, str] = {}
-        for candidate in range(1, 80):
+        try:
+            content = json.loads(content_response.message)
+        except json.JSONDecodeError:
+            content = {}
+        for element_id in element_ids:
+            selector_content = str(content.get(f"#{element_id}") or "")
+            match = re.search(r"\[[^\]]*?(\d+)\]", selector_content)
+            if match:
+                refs[element_id] = match.group(1)
+        for candidate in refs.values():
             response = await tool.execute(action="detail", ref=candidate)
             if response.message.startswith("Browser ") and " failed:" in response.message:
                 continue
@@ -64,11 +73,13 @@ async def main() -> int:
             if not found_id and isinstance(dom, str):
                 match = re.search(r'\bid=["\\\']?([A-Za-z0-9_-]+)', dom)
                 found_id = match.group(1) if match else ""
-            if found_id in element_ids:
+            if found_id in element_ids and not refs.get(found_id):
                 refs[found_id] = str(detail.get("referenceId") or candidate)
-            if len(refs) == len(element_ids):
-                return refs
+        if len(refs) == len(element_ids):
+            return refs
         missing = sorted(set(element_ids) - set(refs))
+        Path("artifacts").mkdir(exist_ok=True)
+        Path("artifacts/browser-tool-results.json").write_text(json.dumps(results, indent=2) + "\n", encoding="utf-8")
         raise AssertionError(f"Missing Browser refs for: {missing}; resolved={refs}")
 
     await call(action="open", url=html)
