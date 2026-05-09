@@ -60,7 +60,7 @@ async def main() -> int:
     assert Path(bpc_path, "manifest.json").is_file()
     assert bpc_path in enabled_browser_config.get("extension_paths", [])
     assert bpc_path not in disabled_browser_config.get("extension_paths", [])
-    assert result["ublock_origin_lite_probe"]["blocked"], result["ublock_origin_lite_probe"]
+    assert result["ublock_origin_lite_probe"]["matched"], result["ublock_origin_lite_probe"]
     return 0
 
 
@@ -75,12 +75,27 @@ async def run_ubol_probe() -> dict[str, object]:
     blocked: list[str] = []
     failed: list[tuple[str, str]] = []
     finished: list[str] = []
+    probe_urls = (
+        "https://ad.doubleclick.net/cloakbrowser-ad-probe.gif",
+        "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js",
+        "https://scorecardresearch.com/cloakbrowser-ad-probe.gif",
+    )
     try:
         await core.open("https://example.com")
         browser_page = next(iter(core.pages.values()))
         page = browser_page.page
         page.set_default_timeout(15000)
         page.set_default_navigation_timeout(15000)
+        worker = await wait_for_ubol_worker(core.context)
+        dnr_matches = await worker.evaluate(
+            """urls => Promise.all(urls.map(url => new Promise(resolve => {
+                chrome.declarativeNetRequest.testMatchOutcome(
+                    { url, type: 'image' },
+                    outcome => resolve({ url, rulesMatched: outcome.rulesMatched || [] })
+                );
+            })))""",
+            list(probe_urls),
+        )
 
         def on_request_failed(request):
             failure = request.failure or ""
@@ -90,11 +105,7 @@ async def run_ubol_probe() -> dict[str, object]:
 
         page.on("requestfailed", on_request_failed)
         page.on("requestfinished", lambda request: finished.append(request.url))
-        for probe_url in (
-            "https://ad.doubleclick.net/cloakbrowser-ad-probe.gif",
-            "https://3lift.com/cloakbrowser-ad-probe.gif",
-            "https://scorecardresearch.com/cloakbrowser-ad-probe.gif",
-        ):
+        for probe_url in probe_urls:
             await page.evaluate(
                 """url => new Promise(resolve => {
                     const img = document.createElement("img");
@@ -109,9 +120,41 @@ async def run_ubol_probe() -> dict[str, object]:
             if blocked:
                 break
         await page.wait_for_timeout(1000)
-        return {"blocked": blocked, "failed": failed, "finished": finished}
+        return {
+            "blocked": blocked,
+            "failed": failed,
+            "finished": finished,
+            "dnr_matches": dnr_matches,
+            "matched": any(item.get("rulesMatched") for item in dnr_matches),
+        }
     finally:
         await core.close(delete_profile=True)
+
+
+async def wait_for_ubol_worker(context):
+    deadline = asyncio.get_running_loop().time() + 15
+    while asyncio.get_running_loop().time() < deadline:
+        for worker in context.service_workers:
+            if await is_ubol_worker(worker):
+                return worker
+        try:
+            worker = await context.wait_for_event("serviceworker", timeout=1000)
+        except Exception:
+            continue
+        if await is_ubol_worker(worker):
+            return worker
+    raise AssertionError("uBlock Origin Lite service worker not found")
+
+
+async def is_ubol_worker(worker) -> bool:
+    if "chrome-extension://" not in worker.url:
+        return False
+    try:
+        manifest = await worker.evaluate("chrome.runtime.getManifest()")
+    except Exception:
+        return False
+    permissions = set(manifest.get("permissions") or [])
+    return manifest.get("name") == "__MSG_extName__" and "declarativeNetRequest" in permissions
 
 
 if __name__ == "__main__":
