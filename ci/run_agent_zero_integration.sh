@@ -13,8 +13,8 @@ docker run --rm --shm-size=2g \
   bash -lc '
     set -euo pipefail
     . /ins/setup_venv.sh local
-    mkdir -p /workspace /artifacts
-    cd /workspace
+    mkdir -p /artifacts
+    cd /a0
     python - <<PY
 import sys
 sys.path.insert(0, "/git/agent-zero")
