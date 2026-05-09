@@ -35,8 +35,8 @@ async def main() -> int:
           <select id=s><option value=a>A</option><option value=b>B</option></select>
           <input id=u type=file>
           <div id=e contenteditable=true>edit</div>
-          <div id=d draggable=true style="width:60px;height:30px;background:#ddd">drag</div>
-          <div id=target style="width:80px;height:40px;background:#bbb">target</div>
+          <button id=d type=button draggable=true style="width:60px;height:30px;background:#ddd">drag</button>
+          <button id=target type=button style="width:80px;height:40px;background:#bbb">target</button>
           <button id=submit type=submit>Submit</button>
         </form>
         <script>window.submitted=0;</script>
