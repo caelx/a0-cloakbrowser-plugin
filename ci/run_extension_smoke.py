@@ -81,11 +81,7 @@ async def run_ubol_probe() -> dict[str, object]:
     blocked: list[str] = []
     failed: list[tuple[str, str]] = []
     finished: list[str] = []
-    probe_urls = (
-        "https://ad.doubleclick.net/cloakbrowser-ad-probe.gif",
-        "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js",
-        "https://scorecardresearch.com/cloakbrowser-ad-probe.gif",
-    )
+    probe_urls = probe_urls_for_static_match(static_match)
     try:
         await core.open("https://example.com")
         browser_page = next(iter(core.pages.values()))
@@ -120,6 +116,7 @@ async def run_ubol_probe() -> dict[str, object]:
             "blocked": blocked,
             "failed": failed,
             "finished": finished,
+            "probe_urls": probe_urls,
             "static_ruleset_match": static_match,
             "matched": bool(blocked or static_match.get("matched")),
             "live_block_required": os.environ.get("CLOAKBROWSER_UBOL_REQUIRE_LIVE_BLOCK") == "1",
@@ -150,6 +147,20 @@ def installed_ubol_ruleset_match(extension_dir: Path) -> dict[str, object]:
                     "domains": sorted({"3lift.com", "scorecardresearch.com"} & domains),
                 }
     return {"matched": False, "enabled_rulesets": [item.get("id") for item in enabled]}
+
+
+def probe_urls_for_static_match(static_match: dict[str, object]) -> tuple[str, ...]:
+    domains = [domain for domain in static_match.get("domains", []) if isinstance(domain, str)]
+    selected = domains[:1] or ["3lift.com"]
+    return tuple(
+        f"https://{domain}/cloakbrowser-ad-probe.gif"
+        for domain in [
+            *selected,
+            "ad.doubleclick.net",
+            "pagead2.googlesyndication.com",
+            "scorecardresearch.com",
+        ]
+    )
 
 
 if __name__ == "__main__":

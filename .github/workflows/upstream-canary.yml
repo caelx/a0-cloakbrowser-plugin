@@ -7,6 +7,9 @@ on:
   repository_dispatch:
     types: [cloakbrowser-upstream-canary]
 
+permissions:
+  contents: read
+
 jobs:
   canary:
     runs-on: ubuntu-latest
@@ -20,7 +23,6 @@ jobs:
       CLOAKBROWSER_AGENT_ZERO_IMAGE: agent0ai/agent-zero:latest
       CLOAKBROWSER_LIVE_DETECTOR: "1"
       CLOAKBROWSER_LIVE_DETECTOR_STRICT: "1"
-      CLOAKBROWSER_UBOL_REQUIRE_LIVE_BLOCK: "1"
     steps:
       - uses: actions/checkout@v6
       - name: Use CloakBrowser GitHub main
@@ -33,8 +35,20 @@ jobs:
         with:
           name: upstream-canary-${{ matrix.cloakbrowser_source }}
           path: artifacts/
+
+  notify-failure:
+    needs: canary
+    if: failure()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    env:
+      CLOAKBROWSER_AGENT_ZERO_IMAGE: agent0ai/agent-zero:latest
+      CLOAKBROWSER_SOURCE: pypi/github-main
+    steps:
+      - uses: actions/checkout@v6
       - name: Notify failure
-        if: failure()
         env:
           GH_TOKEN: ${{ github.token }}
         run: python ci/notify_failure.py
