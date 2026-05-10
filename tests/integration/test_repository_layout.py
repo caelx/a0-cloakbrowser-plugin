@@ -6,6 +6,7 @@ def test_root_plugin_metadata_is_installable():
     plugin_yaml = root / "plugin.yaml"
 
     assert plugin_yaml.is_file()
+    assert (root / "webui" / "thumbnail.png").is_file()
     text = plugin_yaml.read_text(encoding="utf-8")
     assert "name: cloakbrowser" in text
     assert "title: CloakBrowser" in text

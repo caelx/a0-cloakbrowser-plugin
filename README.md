@@ -1,5 +1,7 @@
 # Agent-Zero CloakBrowser Plugin
 
+<img src="webui/thumbnail.png" alt="CloakBrowser plugin logo" width="160">
+
 CloakBrowser-backed overlay for Agent Zero's built-in Browser tool.
 
 The plugin is installed as a normal Agent Zero GitHub plugin because `plugin.yaml`
