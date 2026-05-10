@@ -135,3 +135,12 @@ bash ci/run_agent_zero_integration.sh
 ```
 
 Docker-backed integration requires a working Docker engine.
+
+The Docker integration always runs deterministic local detection checks. Set
+`CLOAKBROWSER_LIVE_DETECTOR=1` to also collect live detector screenshots and
+JSON artifacts for public detection, fingerprint, header, and TLS pages. Live
+detector checks are artifact-producing by default, and CI enables
+`CLOAKBROWSER_LIVE_DETECTOR_STRICT=1` so third-party page probe failures fail
+the run. reCAPTCHA v3, 2captcha v3, and Turnstile are included in that strict
+live gate. Audio FP is skipped while its endpoint serves an expired TLS
+certificate.

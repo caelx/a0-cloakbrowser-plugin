@@ -1,5 +1,4 @@
 import json
-import zipfile
 
 from helpers.bypass_paywalls_clean import _find_extension_root
 

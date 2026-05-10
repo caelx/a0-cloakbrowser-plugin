@@ -1,5 +1,4 @@
 import types
-from pathlib import Path
 
 from helpers import extensions
 

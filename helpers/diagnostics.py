@@ -4,8 +4,6 @@ import importlib
 import os
 import platform
 import shutil
-import subprocess
-from pathlib import Path
 from typing import Any
 
 from .config import get_config, redacted_config

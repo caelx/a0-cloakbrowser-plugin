@@ -12,7 +12,6 @@ async def main() -> int:
     sys.path.insert(0, "/git/agent-zero")
     from usr.plugins.cloakbrowser.helpers.config import get_config
     from usr.plugins.cloakbrowser.helpers.extensions import (
-        active_extension_paths,
         install_configured_extensions,
         list_extension_status,
         managed_extension_paths,
