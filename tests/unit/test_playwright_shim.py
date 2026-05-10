@@ -1,4 +1,7 @@
-from helpers.playwright_shim import _cloak_kwargs, filter_args, should_patch_launch
+import sys
+from types import ModuleType
+
+from helpers.playwright_shim import _cloak_ignore_default_args, _cloak_kwargs, filter_args, should_patch_launch
 
 
 def test_filter_args_drops_conflicts_but_keeps_extension_flags():
@@ -33,7 +36,7 @@ def test_agent_zero_managed_browser_path_is_patched():
     )
 
 
-def test_cloak_kwargs_preserves_ignore_default_args():
+def test_cloak_kwargs_strips_launch_wrapper_args():
     cleaned = _cloak_kwargs(
         {
             "executable_path": "/opt/cloakbrowser/chrome",
@@ -43,4 +46,23 @@ def test_cloak_kwargs_preserves_ignore_default_args():
     )
 
     assert "executable_path" not in cleaned
-    assert cleaned["ignore_default_args"] == ["--disable-dev-shm-usage"]
+    assert "ignore_default_args" not in cleaned
+
+
+def test_cloak_ignore_default_args_patches_cloakbrowser_module(monkeypatch):
+    package = ModuleType("cloakbrowser")
+    browser_module = ModuleType("cloakbrowser.browser")
+    browser_module.IGNORE_DEFAULT_ARGS = ["--enable-automation"]
+    package.browser = browser_module
+    monkeypatch.setitem(sys.modules, "cloakbrowser", package)
+    monkeypatch.setitem(sys.modules, "cloakbrowser.browser", browser_module)
+
+    with _cloak_ignore_default_args(
+        {"ignore_default_args": ["--enable-automation", "--disable-dev-shm-usage"]}
+    ):
+        assert browser_module.IGNORE_DEFAULT_ARGS == [
+            "--enable-automation",
+            "--disable-dev-shm-usage",
+        ]
+
+    assert browser_module.IGNORE_DEFAULT_ARGS == ["--enable-automation"]

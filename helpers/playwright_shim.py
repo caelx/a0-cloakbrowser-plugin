@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import random
+from contextlib import contextmanager
 from contextvars import ContextVar
 from pathlib import Path
 from typing import Any
@@ -225,7 +226,8 @@ async def _cloak_launch_async(kwargs: dict[str, Any]):
 
     token = _IN_CLOAK_LAUNCH.set(True)
     try:
-        return await launch_async(**_cloak_kwargs(kwargs))
+        with _cloak_ignore_default_args(kwargs):
+            return await launch_async(**_cloak_kwargs(kwargs))
     finally:
         _IN_CLOAK_LAUNCH.reset(token)
 
@@ -235,7 +237,8 @@ def _cloak_launch_sync(kwargs: dict[str, Any]):
 
     token = _IN_CLOAK_LAUNCH.set(True)
     try:
-        return launch(**_cloak_kwargs(kwargs))
+        with _cloak_ignore_default_args(kwargs):
+            return launch(**_cloak_kwargs(kwargs))
     finally:
         _IN_CLOAK_LAUNCH.reset(token)
 
@@ -246,7 +249,8 @@ async def _cloak_launch_persistent_async(user_data_dir: str | Path, kwargs: dict
     cleaned = _cloak_kwargs(kwargs)
     token = _IN_CLOAK_LAUNCH.set(True)
     try:
-        return await launch_persistent_context_async(user_data_dir=user_data_dir, **cleaned)
+        with _cloak_ignore_default_args(kwargs):
+            return await launch_persistent_context_async(user_data_dir=user_data_dir, **cleaned)
     finally:
         _IN_CLOAK_LAUNCH.reset(token)
 
@@ -257,7 +261,8 @@ def _cloak_launch_persistent_sync(user_data_dir: str | Path, kwargs: dict[str, A
     cleaned = _cloak_kwargs(kwargs)
     token = _IN_CLOAK_LAUNCH.set(True)
     try:
-        return launch_persistent_context(user_data_dir=user_data_dir, **cleaned)
+        with _cloak_ignore_default_args(kwargs):
+            return launch_persistent_context(user_data_dir=user_data_dir, **cleaned)
     finally:
         _IN_CLOAK_LAUNCH.reset(token)
 
@@ -265,7 +270,29 @@ def _cloak_launch_persistent_sync(user_data_dir: str | Path, kwargs: dict[str, A
 def _cloak_kwargs(kwargs: dict[str, Any]) -> dict[str, Any]:
     cleaned = dict(kwargs)
     cleaned.pop("executable_path", None)
+    cleaned.pop("ignore_default_args", None)
     return cleaned
+
+
+@contextmanager
+def _cloak_ignore_default_args(kwargs: dict[str, Any]):
+    additions = kwargs.get("ignore_default_args")
+    if not additions:
+        yield
+        return
+
+    import cloakbrowser.browser as cloak_browser
+
+    original = getattr(cloak_browser, "IGNORE_DEFAULT_ARGS", None)
+    if additions is True:
+        merged: list[str] | bool = True
+    else:
+        merged = _merge_ignore_default_args(original or [], list(additions))
+    cloak_browser.IGNORE_DEFAULT_ARGS = merged
+    try:
+        yield
+    finally:
+        cloak_browser.IGNORE_DEFAULT_ARGS = original
 
 
 def _identity_args(cfg: dict[str, Any]) -> list[str]:
