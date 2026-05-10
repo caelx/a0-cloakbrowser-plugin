@@ -34,14 +34,18 @@ def active_extension_paths(config: dict[str, Any] | None = None) -> list[str]:
     active: list[str] = []
     if ext["enable_ublock_origin_lite"] and _is_loadable(paths["ublock_origin_lite"]):
         active.append(str(paths["ublock_origin_lite"]))
-    if ext["enable_i_still_dont_care_about_cookies"] and _is_loadable(paths["i_still_dont_care_about_cookies"]):
+    if ext["enable_i_still_dont_care_about_cookies"] and _is_loadable(
+        paths["i_still_dont_care_about_cookies"]
+    ):
         active.append(str(paths["i_still_dont_care_about_cookies"]))
     if ext["enable_bypass_paywalls_clean"] and _is_loadable(paths["bypass_paywalls_clean"]):
         active.append(str(paths["bypass_paywalls_clean"]))
     return active
 
 
-def install_configured_extensions(config: dict[str, Any] | None, manifest: dict[str, Any]) -> list[str]:
+def install_configured_extensions(
+    config: dict[str, Any] | None, manifest: dict[str, Any]
+) -> list[str]:
     cfg = get_config(config)
     paths = managed_extension_paths()
     ext = cfg["extensions"]
@@ -55,18 +59,30 @@ def install_configured_extensions(config: dict[str, Any] | None, manifest: dict[
         meta = install_ublock_origin_lite(paths["ublock_origin_lite"], cfg["ublock_origin_lite"])
         record_extension(manifest, "ublock_origin_lite", meta)
         installed.append("ublock_origin_lite")
-        actions.append(_extension_action("ublock_origin_lite", paths["ublock_origin_lite"], action, cfg))
+        actions.append(
+            _extension_action("ublock_origin_lite", paths["ublock_origin_lite"], action, cfg)
+        )
     elif _is_loadable(paths["ublock_origin_lite"]):
-        record_extension(manifest, "ublock_origin_lite", extension_metadata(paths["ublock_origin_lite"], source="existing"))
-        actions.append(_extension_action("ublock_origin_lite", paths["ublock_origin_lite"], "reused", cfg))
+        record_extension(
+            manifest,
+            "ublock_origin_lite",
+            extension_metadata(paths["ublock_origin_lite"], source="existing"),
+        )
+        actions.append(
+            _extension_action("ublock_origin_lite", paths["ublock_origin_lite"], "reused", cfg)
+        )
     else:
-        actions.append(_extension_action("ublock_origin_lite", paths["ublock_origin_lite"], "skipped", cfg))
+        actions.append(
+            _extension_action("ublock_origin_lite", paths["ublock_origin_lite"], "skipped", cfg)
+        )
 
     if ext["install_i_still_dont_care_about_cookies"] and (
         ext["update_i_still_dont_care_about_cookies_on_setup"]
         or not _is_loadable(paths["i_still_dont_care_about_cookies"])
     ):
-        action = "updated" if _is_loadable(paths["i_still_dont_care_about_cookies"]) else "installed"
+        action = (
+            "updated" if _is_loadable(paths["i_still_dont_care_about_cookies"]) else "installed"
+        )
         meta = install_chrome_web_store_extension(
             COOKIE_EXTENSION_ID,
             paths["i_still_dont_care_about_cookies"],
@@ -106,22 +122,35 @@ def install_configured_extensions(config: dict[str, Any] | None, manifest: dict[
         )
 
     if ext["install_bypass_paywalls_clean"] and (
-        ext["update_bypass_paywalls_clean_on_setup"] or not _is_loadable(paths["bypass_paywalls_clean"])
+        ext["update_bypass_paywalls_clean_on_setup"]
+        or not _is_loadable(paths["bypass_paywalls_clean"])
     ):
         action = "updated" if _is_loadable(paths["bypass_paywalls_clean"]) else "installed"
-        meta = install_bypass_paywalls_clean(paths["bypass_paywalls_clean"])
+        meta = install_bypass_paywalls_clean(
+            paths["bypass_paywalls_clean"], config=cfg["bypass_paywalls_clean"]
+        )
         record_extension(manifest, "bypass_paywalls_clean", meta)
         installed.append("bypass_paywalls_clean")
-        actions.append(_extension_action("bypass_paywalls_clean", paths["bypass_paywalls_clean"], action, cfg))
+        actions.append(
+            _extension_action("bypass_paywalls_clean", paths["bypass_paywalls_clean"], action, cfg)
+        )
     elif _is_loadable(paths["bypass_paywalls_clean"]):
         record_extension(
             manifest,
             "bypass_paywalls_clean",
             extension_metadata(paths["bypass_paywalls_clean"], source="existing"),
         )
-        actions.append(_extension_action("bypass_paywalls_clean", paths["bypass_paywalls_clean"], "reused", cfg))
+        actions.append(
+            _extension_action(
+                "bypass_paywalls_clean", paths["bypass_paywalls_clean"], "reused", cfg
+            )
+        )
     else:
-        actions.append(_extension_action("bypass_paywalls_clean", paths["bypass_paywalls_clean"], "skipped", cfg))
+        actions.append(
+            _extension_action(
+                "bypass_paywalls_clean", paths["bypass_paywalls_clean"], "skipped", cfg
+            )
+        )
 
     manifest["extension_paths_enabled"] = active_extension_paths(cfg)
     manifest["extension_actions"] = actions
@@ -135,10 +164,14 @@ def sync_browser_extension_paths(config: dict[str, Any] | None = None) -> list[s
         plugins, get_browser_config = _agent_zero_browser_config_helpers()
 
         browser_config = get_browser_config()
-        current_paths = [str(Path(path).expanduser()) for path in browser_config.get("extension_paths", [])]
+        current_paths = _dedupe_paths(
+            str(Path(path).expanduser()) for path in browser_config.get("extension_paths", [])
+        )
         managed = {str(path) for path in managed_extension_paths().values()}
         preserved = [path for path in current_paths if path not in managed]
-        browser_config["extension_paths"] = preserved + [path for path in active if path not in preserved]
+        browser_config["extension_paths"] = _dedupe_paths(
+            preserved + [path for path in active if path not in preserved]
+        )
         plugins.save_plugin_config("_browser", "", "", browser_config)
     except Exception:
         pass
@@ -219,6 +252,18 @@ def uninstall_managed_extension(key: str, *, remove_files: bool = False) -> dict
 
 def _is_loadable(path: Path) -> bool:
     return (path / "manifest.json").is_file()
+
+
+def _dedupe_paths(paths) -> list[str]:
+    out: list[str] = []
+    seen: set[str] = set()
+    for path in paths:
+        text = str(path)
+        if text in seen:
+            continue
+        seen.add(text)
+        out.append(text)
+    return out
 
 
 def _extension_action(key: str, path: Path, action: str, config: dict[str, Any]) -> dict[str, Any]:

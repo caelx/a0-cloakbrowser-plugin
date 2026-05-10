@@ -70,3 +70,8 @@ ublock_origin_lite:
     - annoyances-overlays
     - annoyances-social
     - annoyances-widgets
+
+bypass_paywalls_clean:
+  opt_in_setcookie: true
+  opt_in_custom_sites: true
+  opt_in_update: true

@@ -18,7 +18,9 @@ async def main() -> int:
         def log(self, **kwargs):
             return kwargs
 
-    agent = SimpleNamespace(context=SimpleNamespace(id="cloakbrowser-ci", log=Log()), agent_name="CI")
+    agent = SimpleNamespace(
+        context=SimpleNamespace(id="cloakbrowser-ci", log=Log()), agent_name="CI"
+    )
     tool = Browser(agent=agent, name="browser", method=None, args={}, message="", loop_data=None)
     results = []
     upload = Path("/tmp/cloakbrowser-upload.txt")
@@ -44,17 +46,24 @@ async def main() -> int:
     </html>
     """
     html = "data:text/html;charset=utf-8," + quote(markup)
+
     async def call(**kwargs):
         response = await tool.execute(**kwargs)
-        results.append({"call": kwargs, "message": response.message, "break_loop": response.break_loop})
+        results.append(
+            {"call": kwargs, "message": response.message, "break_loop": response.break_loop}
+        )
         if response.message.startswith("Browser ") and " failed:" in response.message:
             Path("artifacts").mkdir(exist_ok=True)
-            Path("artifacts/browser-tool-results.json").write_text(json.dumps(results, indent=2) + "\n", encoding="utf-8")
+            Path("artifacts/browser-tool-results.json").write_text(
+                json.dumps(results, indent=2) + "\n", encoding="utf-8"
+            )
             raise AssertionError(response.message)
         return response
 
     async def resolve_refs(*element_ids: str) -> dict[str, str]:
-        content_response = await call(action="content", selectors=[f"#{element_id}" for element_id in element_ids])
+        content_response = await call(
+            action="content", selectors=[f"#{element_id}" for element_id in element_ids]
+        )
         refs: dict[str, str] = {}
         try:
             content = json.loads(content_response.message)
@@ -85,7 +94,9 @@ async def main() -> int:
             return refs
         missing = sorted(set(element_ids) - set(refs))
         Path("artifacts").mkdir(exist_ok=True)
-        Path("artifacts/browser-tool-results.json").write_text(json.dumps(results, indent=2) + "\n", encoding="utf-8")
+        Path("artifacts/browser-tool-results.json").write_text(
+            json.dumps(results, indent=2) + "\n", encoding="utf-8"
+        )
         raise AssertionError(f"Missing Browser refs for: {missing}; resolved={refs}")
 
     await call(action="open", url=html)
@@ -114,9 +125,15 @@ async def main() -> int:
         {"action": "set_checked", "ref": refs["c"], "checked": True},
         {"action": "upload_file", "ref": refs["u"], "path": str(upload)},
         {"action": "mouse", "event_type": "move", "x": 10, "y": 10},
-        {"action": "multi", "calls": [{"action": "state"}, {"action": "evaluate", "script": "window.innerWidth"}]},
+        {
+            "action": "multi",
+            "calls": [{"action": "state"}, {"action": "evaluate", "script": "window.innerWidth"}],
+        },
         {"action": "screenshot"},
-        {"action": "navigate", "url": "data:text/html;charset=utf-8," + quote("<title>next</title>")},
+        {
+            "action": "navigate",
+            "url": "data:text/html;charset=utf-8," + quote("<title>next</title>"),
+        },
         {"action": "back"},
         {"action": "forward"},
         {"action": "reload"},
@@ -128,6 +145,17 @@ async def main() -> int:
     last_response = None
     for kwargs in calls:
         last_response = await call(**kwargs)
+        if kwargs.get("action") == "type":
+            value_response = await call(
+                action="evaluate", script="document.querySelector('#t').value"
+            )
+            assert json.loads(value_response.message)["result"] == "abc"
+        if kwargs.get("action") in {"type_submit", "typesubmit"}:
+            value_response = await call(
+                action="evaluate", script="document.querySelector('#t').value"
+            )
+            value = json.loads(value_response.message)["result"]
+            assert value in {"xyz", "abcxyz"}
     close_all_result = json.loads(last_response.message)
     assert close_all_result["browsers"] == [
         {
@@ -141,7 +169,9 @@ async def main() -> int:
         }
     ], close_all_result
     Path("artifacts").mkdir(exist_ok=True)
-    Path("artifacts/browser-tool-results.json").write_text(json.dumps(results, indent=2) + "\n", encoding="utf-8")
+    Path("artifacts/browser-tool-results.json").write_text(
+        json.dumps(results, indent=2) + "\n", encoding="utf-8"
+    )
     return 0
 
 

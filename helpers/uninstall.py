@@ -7,6 +7,7 @@ from .install_manifest import load_manifest, save_manifest
 from .runtime_patch import unpatch_runtime
 from .playwright_shim import unpatch_playwright
 from .seed_playwright import remove_masquerade
+from .source_patch import restore_runtime_source_patch
 from .xvfb import remove_direct_xvfb_if_owned, remove_supervisor_config_if_owned
 
 
@@ -14,6 +15,7 @@ def uninstall(*, remove_extensions: bool = False) -> dict:
     manifest = load_manifest()
     disabled_paths = disable_managed_extension_paths()
     runtime = unpatch_runtime()
+    source_runtime = restore_runtime_source_patch(manifest)
     shim = unpatch_playwright()
     masquerade_removed = remove_masquerade(
         manifest.get("playwright_shim", {}).get("masquerade_path") or None
@@ -32,6 +34,7 @@ def uninstall(*, remove_extensions: bool = False) -> dict:
         "ok": True,
         "disabled_extension_paths": disabled_paths,
         "runtime_patch": runtime,
+        "runtime_source_patch": source_runtime,
         "playwright_shim": shim,
         "masquerade_removed": masquerade_removed,
         "supervisor": supervisor,
