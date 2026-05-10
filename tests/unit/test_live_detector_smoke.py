@@ -32,3 +32,29 @@ def test_live_failures_reports_errors_and_failed_checks():
     )
 
     assert len(failures) == 2
+
+
+def test_target_checks_include_infrastructure_checks(tmp_path):
+    screenshot = tmp_path / "page.png"
+    screenshot.write_bytes(b"png")
+    checks = smoke.target_checks(
+        smoke.LiveTarget("example", "detection", "https://example.com"),
+        {
+            "state": {"url": "https://example.com", "title": "Example"},
+            "text": "",
+            "screenshot": str(screenshot),
+            "environment": {
+                "webdriver": False,
+                "userAgent": "Chrome",
+                "innerWidth": 1920,
+                "innerHeight": 1080,
+                "screenWidth": 1920,
+                "screenHeight": 1080,
+            },
+        },
+    )
+
+    by_name = {item["name"]: item["status"] for item in checks}
+    assert by_name["page loaded"] == "passed"
+    assert by_name["page has title or body text"] == "passed"
+    assert by_name["screenshot was created"] == "passed"

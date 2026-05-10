@@ -124,7 +124,9 @@ python execute.py uninstall --noninteractive
 Uninstall disables plugin-managed `_browser` extension paths, removes in-process
 patches where possible, removes plugin-managed shim/supervisor files recorded in
 the install manifest, and preserves browser profiles, downloads, screenshots,
-cookies, and local storage.
+cookies, and local storage. If setup started a direct plugin-managed Xvfb
+process, uninstall terminates the recorded PID after verifying it is an Xvfb
+process for the recorded display.
 
 ## Validation
 
@@ -144,3 +146,8 @@ detector checks are artifact-producing by default, and CI enables
 the run. reCAPTCHA v3, 2captcha v3, and Turnstile are included in that strict
 live gate. Audio FP is skipped while its endpoint serves an expired TLS
 certificate.
+
+The uninstall smoke verifies extension cleanup, masquerade removal, patch state,
+and profile preservation. It records stock `_browser` launch verification as
+skipped because removing the masquerade can leave no stock Playwright Chromium
+installed in the Agent Zero image.

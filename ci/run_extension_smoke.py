@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import json
 import copy
+import os
 import sys
 from pathlib import Path
 
@@ -59,7 +60,11 @@ async def main() -> int:
     assert Path(bpc_path, "manifest.json").is_file()
     assert bpc_path in enabled_browser_config.get("extension_paths", [])
     assert bpc_path not in disabled_browser_config.get("extension_paths", [])
-    assert result["ublock_origin_lite_probe"]["matched"], result["ublock_origin_lite_probe"]
+    ubol_probe = result["ublock_origin_lite_probe"]
+    if os.environ.get("CLOAKBROWSER_UBOL_REQUIRE_LIVE_BLOCK") == "1":
+        assert ubol_probe["blocked"], ubol_probe
+    else:
+        assert ubol_probe["blocked"] or ubol_probe["matched"], ubol_probe
     return 0
 
 
@@ -116,7 +121,8 @@ async def run_ubol_probe() -> dict[str, object]:
             "failed": failed,
             "finished": finished,
             "static_ruleset_match": static_match,
-            "matched": bool(static_match.get("matched")),
+            "matched": bool(blocked or static_match.get("matched")),
+            "live_block_required": os.environ.get("CLOAKBROWSER_UBOL_REQUIRE_LIVE_BLOCK") == "1",
         }
     finally:
         await core.close(delete_profile=True)

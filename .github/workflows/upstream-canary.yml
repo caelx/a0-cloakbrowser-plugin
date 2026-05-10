@@ -20,6 +20,7 @@ jobs:
       CLOAKBROWSER_AGENT_ZERO_IMAGE: agent0ai/agent-zero:latest
       CLOAKBROWSER_LIVE_DETECTOR: "1"
       CLOAKBROWSER_LIVE_DETECTOR_STRICT: "1"
+      CLOAKBROWSER_UBOL_REQUIRE_LIVE_BLOCK: "1"
     steps:
       - uses: actions/checkout@v6
       - name: Use CloakBrowser GitHub main

@@ -47,6 +47,13 @@ def main() -> int:
     }
     if parsed_stdout.get("supervisor", {}).get("removed"):
         assertions["supervisor_config_removed"] = not Path(parsed_stdout["supervisor"]["removed"]).exists()
+    stock_browser_launch = {
+        "skipped": True,
+        "reason": (
+            "Skipped because uninstall removes the CloakBrowser masquerade and stock Playwright "
+            "Chromium may not be installed in the Agent Zero image."
+        ),
+    }
     Path("artifacts").mkdir(exist_ok=True)
     Path("artifacts/uninstall-results.json").write_text(
         json.dumps(
@@ -59,6 +66,7 @@ def main() -> int:
                 "after_extension_paths": after_config.get("extension_paths", []),
                 "masquerade_path": str(masquerade),
                 "runtime_profile": str(runtime_profile),
+                "stock_browser_launch": stock_browser_launch,
                 "assertions": assertions,
             },
             indent=2,

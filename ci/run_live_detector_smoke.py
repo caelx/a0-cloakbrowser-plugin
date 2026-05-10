@@ -114,10 +114,10 @@ async def probe_target(core: Any, target: LiveTarget, screenshots: Path) -> dict
         result["state"] = {"url": page.url, "title": await page.title()}
         result["environment"] = await browser_environment(page)
         result["text"] = await page_text(page)
-        result["checks"] = target_checks(target, result)
         screenshot = screenshots / f"{target.category}-{target.name}.png"
         await page.screenshot(path=str(screenshot))
         result["screenshot"] = str(screenshot)
+        result["checks"] = target_checks(target, result)
     except Exception as exc:
         result["status"] = "error"
         result["error"] = repr(exc)
@@ -150,6 +150,9 @@ async def page_text(page: Any) -> str:
 
 def target_checks(target: LiveTarget, result: dict[str, Any]) -> list[dict[str, Any]]:
     checks = [
+        check("page loaded", bool(result.get("state", {}).get("url"))),
+        check("page has title or body text", bool(result.get("state", {}).get("title") or result.get("text"))),
+        check("screenshot was created", bool(result.get("screenshot")) and Path(str(result["screenshot"])).is_file()),
         check(
             "navigator.webdriver is not true", result["environment"].get("webdriver") is not True
         ),
