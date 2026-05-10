@@ -135,3 +135,8 @@ bash ci/run_agent_zero_integration.sh
 ```
 
 Docker-backed integration requires a working Docker engine.
+
+Set `CLOAKBROWSER_LIVE_DETECTOR=1` with `ci/run_agent_zero_integration.sh` to
+collect non-gating screenshots and JSON from third-party bot, fingerprint,
+headers/TLS, and captcha detector pages. These live checks are artifacts only
+because the pages are external and can change or block CI.
