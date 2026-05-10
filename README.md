@@ -70,21 +70,21 @@ usr/plugins/_browser/playwright/chromium-cloakbrowser/chrome-linux/chrome
 
 That lets `_browser.helpers.playwright.get_playwright_binary(full_browser=True)`
 resolve a Chromium-shaped binary without forcing stock Playwright Chromium to be
-installed first. At launch time, `helpers/playwright_shim.py` still patches
-Playwright's Chromium `launch` and `launch_persistent_context` methods in the
-current process and replaces the executable with `cloakbrowser.ensure_binary()`.
+installed first. During setup, the plugin also patches Agent Zero's
+`_browser/helpers/runtime.py` so the built-in Browser runtime routes launch
+kwargs through CloakBrowser before `launch_persistent_context`.
 
-Runtime patching is process-local. The Execute flow installs dependencies,
-extensions, display support, and the Playwright cache masquerade; it does not
-permanently rewrite Agent Zero runtime files. The Browser tool process applies
-the runtime patch before first use. Diagnostics distinguish setup-installed
-state from process-local patch state.
+The source patch is guarded by `advanced.patch_runtime_file_if_needed`, records
+the original and patched file hashes plus a backup path in the install manifest,
+and is restored on uninstall only when the current file still matches the
+plugin-patched hash. Process-local runtime and Playwright monkey patches remain
+as fallback support for smoke tests and development runs.
 
 The runtime patch intentionally changes two `_browser` behaviors:
 
 - The open-shadow-DOM init script is replaced with a no-op when
   `advanced.disable_shadow_dom_init_patch` is enabled. This matches the effective
-  Ghostship CloakBrowser behavior without editing Agent Zero source files.
+  Ghostship CloakBrowser behavior.
 - In headed mode, the sole initial `about:blank` page is preserved so the visible
   CloakBrowser window is not closed during `_browser` startup.
 - In headed mode, `close_all` closes user pages but leaves one registered
@@ -144,6 +144,15 @@ Execute reuses installed extensions by default. If an extension's
 `update_*_on_setup` config option is enabled, Execute refreshes that extension
 during setup and reports it as updated.
 
+BPC has managed opt-ins under `bypass_paywalls_clean`: setCookie, custom sites,
+and update checks default enabled. When custom sites are enabled, setup uses
+BPC's upstream custom manifest so Chromium grants `*://*/*` host access.
+
+`sync_browser_extension_paths()` owns only the current managed extension paths
+for this plugin install and exact-dedupes entries. If a live image has stale
+paths from an older plugin root, reset `_browser` config/browser profile data
+and rerun setup.
+
 No paid-content bypass tests are run. CI only validates installation, manifest
 loading, enable/disable behavior, and launch argument inclusion.
 
@@ -155,18 +164,19 @@ Run uninstall before deleting the plugin directory if setup was run:
 python execute.py uninstall --noninteractive
 ```
 
-Uninstall disables plugin-managed `_browser` extension paths, removes in-process
-patches where possible, removes plugin-managed shim/supervisor files recorded in
-the install manifest, and preserves browser profiles, downloads, screenshots,
-cookies, and local storage. If setup started a direct plugin-managed Xvfb
-process, uninstall terminates the recorded PID after verifying it is an Xvfb
-process for the recorded display.
+Uninstall disables plugin-managed `_browser` extension paths, restores the
+runtime source patch when the patched file hash still matches, removes
+in-process patches where possible, removes plugin-managed shim/supervisor files
+recorded in the install manifest, and preserves browser profiles, downloads,
+screenshots, cookies, and local storage. If setup started a direct
+plugin-managed Xvfb process, uninstall terminates the recorded PID after
+verifying it is an Xvfb process for the recorded display.
 
 ## Validation
 
 ```bash
-nix develop -c python -m pytest -s tests/unit
-nix develop -c python -m pytest -s tests/integration
+uv run --group dev pytest -s tests/unit
+uv run --group dev pytest -s tests/integration
 bash ci/run_agent_zero_integration.sh
 ```
 
@@ -176,9 +186,9 @@ integration uses `--shm-size=2g`; the CI matrix also runs a small-shm smoke with
 See `docs/chill-penguin-crash-analysis.md` for the symbolicated production dump
 evidence behind this mitigation.
 
-The Nix flake dev shell provides Python, uv, pytest, ruff, gh, Docker client,
-Xvfb, Chromium diagnostics, native Chromium runtime libraries, and a pinned
-`cloakbrowser[geoip]` install in `.venv`.
+The Nix flake dev shell provides Python, uv, gh, Docker client, Xvfb, Chromium
+diagnostics, and native Chromium runtime libraries. Python dev tools are defined
+in `pyproject.toml` under the `dev` dependency group.
 
 The Docker integration always runs deterministic local detection checks. Set
 `CLOAKBROWSER_LIVE_DETECTOR=1` to also collect live detector screenshots and

@@ -87,7 +87,7 @@
                 uv venv --python "$UV_PYTHON" "$PWD/.venv" >/dev/null
               fi
               if ! "$PWD/.venv/bin/python" -c "import cloakbrowser" 2>/dev/null; then
-                uv pip install --python "$PWD/.venv/bin/python" -r requirements-dev.txt
+                uv sync --group dev
               fi
             '';
           };

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Add persistent Agent Zero `_browser` runtime source patching with manifest
+  hashes/backups and guarded uninstall restore.
+- Add managed Bypass Paywalls Clean setCookie, custom-sites, and update opt-ins.
+- Exact-dedupe managed extension paths and document live stale-data reset.
 - Preserve one headed `about:blank` tab during Browser `close_all` to avoid
   closing the visible CloakBrowser context.
 - Dedupe final Chrome launch switches and gate Docker integration logs on

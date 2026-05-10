@@ -91,6 +91,11 @@ DEFAULT_CONFIG: dict[str, Any] = {
             "annoyances-widgets",
         ],
     },
+    "bypass_paywalls_clean": {
+        "opt_in_setcookie": True,
+        "opt_in_custom_sites": True,
+        "opt_in_update": True,
+    },
 }
 
 
@@ -203,7 +208,9 @@ def normalize_config(raw: dict[str, Any] | None) -> dict[str, Any]:
     ident["fingerprint_platform"] = str(ident.get("fingerprint_platform") or "Windows").strip()
     ident["fingerprint_noise"] = _bool(ident.get("fingerprint_noise"), False)
     ident["fingerprint_screen_width"] = _int(ident.get("fingerprint_screen_width"), 1920, 320, 8192)
-    ident["fingerprint_screen_height"] = _int(ident.get("fingerprint_screen_height"), 1080, 200, 8192)
+    ident["fingerprint_screen_height"] = _int(
+        ident.get("fingerprint_screen_height"), 1080, 200, 8192
+    )
     ident["storage_quota_mb"] = _optional_int_string(ident.get("storage_quota_mb"))
 
     net = cfg["network_location"]
@@ -220,7 +227,9 @@ def normalize_config(raw: dict[str, Any] | None) -> dict[str, Any]:
     adv["extra_args"] = _string_list(adv.get("extra_args"))
     adv["filter_default_playwright_args"] = _bool(adv.get("filter_default_playwright_args"), True)
     adv["disable_shadow_dom_init_patch"] = _bool(adv.get("disable_shadow_dom_init_patch"), True)
-    adv["preserve_headed_placeholder_page"] = _bool(adv.get("preserve_headed_placeholder_page"), True)
+    adv["preserve_headed_placeholder_page"] = _bool(
+        adv.get("preserve_headed_placeholder_page"), True
+    )
     adv["patch_runtime_file_if_needed"] = _bool(adv.get("patch_runtime_file_if_needed"), True)
 
     for key, default in DEFAULT_CONFIG["extensions"].items():
@@ -234,6 +243,11 @@ def normalize_config(raw: dict[str, Any] | None) -> dict[str, Any]:
     ubol["enabled_rulesets"] = _string_list(ubol.get("enabled_rulesets")) or list(
         DEFAULT_CONFIG["ublock_origin_lite"]["enabled_rulesets"]
     )
+
+    bpc = cfg["bypass_paywalls_clean"]
+    bpc["opt_in_setcookie"] = _bool(bpc.get("opt_in_setcookie"), True)
+    bpc["opt_in_custom_sites"] = _bool(bpc.get("opt_in_custom_sites"), True)
+    bpc["opt_in_update"] = _bool(bpc.get("opt_in_update"), True)
     return cfg
 
 

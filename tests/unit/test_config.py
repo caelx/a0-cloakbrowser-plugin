@@ -22,6 +22,9 @@ def test_normalize_config_defaults_and_invalid_values(monkeypatch):
     assert cfg["network_location"]["webrtc_ip_mode"] == "disabled"
     assert cfg["identity"]["fingerprint_platform"] == "Windows"
     assert cfg["extensions"]["update_i_still_dont_care_about_cookies_on_setup"] is True
+    assert cfg["bypass_paywalls_clean"]["opt_in_setcookie"] is True
+    assert cfg["bypass_paywalls_clean"]["opt_in_custom_sites"] is True
+    assert cfg["bypass_paywalls_clean"]["opt_in_update"] is True
     assert cfg["advanced"]["extra_args"] == ["--foo", "--bar"]
 
 

@@ -153,6 +153,18 @@
           <input type="checkbox" x-model="config.extensions.update_bypass_paywalls_clean_on_setup" />
         </label>
         <label>
+          <span>BPC setCookie opt-in</span>
+          <input type="checkbox" x-model="config.bypass_paywalls_clean.opt_in_setcookie" />
+        </label>
+        <label>
+          <span>BPC custom sites opt-in</span>
+          <input type="checkbox" x-model="config.bypass_paywalls_clean.opt_in_custom_sites" />
+        </label>
+        <label>
+          <span>BPC update opt-in</span>
+          <input type="checkbox" x-model="config.bypass_paywalls_clean.opt_in_update" />
+        </label>
+        <label>
           <span>uBOL filtering mode</span>
           <select x-model="config.ublock_origin_lite.filtering_mode">
             <option value="none">none</option>

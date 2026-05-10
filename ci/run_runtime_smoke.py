@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 
 
-FORBIDDEN_ARGS = ("--disable-gpu", "--disable-extensions")
+FORBIDDEN_ARGS = ("--disable-gpu", "--disable-extensions", "--enable-automation")
 REQUIRED_ARGS = (
     "--fingerprint",
     "--fingerprint-noise=false",
@@ -54,14 +54,24 @@ async def main() -> int:
             assert forbidden not in final_args
         assert not any(arg.startswith("--disable-extensions=") for arg in final_args)
         for required in REQUIRED_ARGS:
-            assert any(arg == required or arg.startswith(required + "=") for arg in final_args), required
+            assert any(
+                arg == required or arg.startswith(required + "=") for arg in final_args
+            ), required
         assert any(arg.startswith("--load-extension=") for arg in final_args)
+        for arg in final_args:
+            if not (
+                arg.startswith("--load-extension=")
+                or arg.startswith("--disable-extensions-except=")
+            ):
+                continue
+            paths = arg.split("=", 1)[1].split(",")
+            assert len(paths) == len(set(paths)), arg
         main_commands = [
-            line for line in result["command_lines"]
-            if " --type=" not in line and "chrome" in line
+            line for line in result["command_lines"] if " --type=" not in line and "chrome" in line
         ]
         assert main_commands, "No main browser process command line found"
         result["main_command_line"] = main_commands[0]
+        assert "--enable-automation" not in main_commands[0], main_commands[0]
         assert main_commands[0].count("--no-sandbox") == 1, main_commands[0]
         assert main_commands[0].count("--disable-dev-shm-usage") == 1, main_commands[0]
         assert result["dimensions"] == {
@@ -75,7 +85,9 @@ async def main() -> int:
         assert not result["remaining_command_lines"], "Browser process remained after close"
     finally:
         Path("artifacts").mkdir(exist_ok=True)
-        Path("artifacts/runtime-smoke-results.json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+        Path("artifacts/runtime-smoke-results.json").write_text(
+            json.dumps(result, indent=2) + "\n", encoding="utf-8"
+        )
     return 0
 
 

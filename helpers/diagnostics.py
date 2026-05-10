@@ -47,17 +47,16 @@ def collect_status(config: dict[str, Any] | None = None) -> dict[str, Any]:
         "patches": {
             "playwright_shim": {
                 **shim_status(),
-                "setup_installed": bool(
-                    manifest.get("playwright_shim", {}).get("masquerade_path")
-                ),
+                "setup_installed": bool(manifest.get("playwright_shim", {}).get("masquerade_path")),
             },
             "runtime_patch": {
                 **runtime_patch_status(),
-                "setup_installed": False,
+                "setup_installed": bool(manifest.get("runtime_source_patch", {}).get("applied")),
+                "source": manifest.get("runtime_source_patch", {}),
             },
             "note": (
-                "Runtime and Playwright monkey patches are process-local; setup installs "
-                "dependencies and cache shims, while Browser tool processes apply patches at use time."
+                "Setup patches the Agent Zero _browser runtime source when enabled. "
+                "Process-local runtime and Playwright patches remain available as fallback."
             ),
             "arg_filtering": "always_on",
         },
@@ -97,7 +96,10 @@ def browser_status() -> dict[str, Any]:
 
         with _agent_zero_import_context():
             from helpers import plugins
-            from plugins._browser.helpers.config import build_browser_launch_config, get_browser_config
+            from plugins._browser.helpers.config import (
+                build_browser_launch_config,
+                get_browser_config,
+            )
 
             enabled = "_browser" in plugins.get_enabled_plugins(None)
             browser_config = get_browser_config()

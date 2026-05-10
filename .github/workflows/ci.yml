@@ -11,7 +11,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: astral-sh/setup-uv@v7
-      - run: uv run --with pytest python -m pytest -s tests/unit
+      - run: uv run --group dev pytest -s tests/unit
 
   integration:
     runs-on: ubuntu-latest
