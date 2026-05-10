@@ -125,8 +125,21 @@ async def main() -> int:
         {"action": "open", "url": "about:blank"},
         {"action": "close_all"},
     ]
+    last_response = None
     for kwargs in calls:
-        await call(**kwargs)
+        last_response = await call(**kwargs)
+    close_all_result = json.loads(last_response.message)
+    assert close_all_result["browsers"] == [
+        {
+            "id": close_all_result["last_interacted_browser_id"],
+            "context_id": "cloakbrowser-ci",
+            "currentUrl": "about:blank",
+            "title": "",
+            "canGoBack": False,
+            "canGoForward": False,
+            "loading": False,
+        }
+    ], close_all_result
     Path("artifacts").mkdir(exist_ok=True)
     Path("artifacts/browser-tool-results.json").write_text(json.dumps(results, indent=2) + "\n", encoding="utf-8")
     return 0

@@ -38,7 +38,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "identity": {
         "fingerprint_seed_mode": "random",
         "fingerprint_seed": "",
-        "fingerprint_platform": "",
+        "fingerprint_platform": "Windows",
         "fingerprint_noise": False,
         "fingerprint_screen_width": 1920,
         "fingerprint_screen_height": 1080,
@@ -46,10 +46,10 @@ DEFAULT_CONFIG: dict[str, Any] = {
     },
     "network_location": {
         "proxy": "",
-        "geoip": True,
+        "geoip": False,
         "timezone": "",
         "locale": "",
-        "webrtc_ip_mode": "auto",
+        "webrtc_ip_mode": "disabled",
         "webrtc_ip": "",
     },
     "advanced": {
@@ -65,7 +65,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "update_ublock_origin_lite_on_setup": False,
         "install_i_still_dont_care_about_cookies": True,
         "enable_i_still_dont_care_about_cookies": True,
-        "update_i_still_dont_care_about_cookies_on_setup": False,
+        "update_i_still_dont_care_about_cookies_on_setup": True,
         "install_bypass_paywalls_clean": False,
         "enable_bypass_paywalls_clean": False,
         "update_bypass_paywalls_clean_on_setup": False,
@@ -200,7 +200,7 @@ def normalize_config(raw: dict[str, Any] | None) -> dict[str, Any]:
     if ident["fingerprint_seed_mode"] not in {"random", "fixed"}:
         ident["fingerprint_seed_mode"] = "random"
     ident["fingerprint_seed"] = str(ident.get("fingerprint_seed") or "").strip()
-    ident["fingerprint_platform"] = str(ident.get("fingerprint_platform") or "").strip()
+    ident["fingerprint_platform"] = str(ident.get("fingerprint_platform") or "Windows").strip()
     ident["fingerprint_noise"] = _bool(ident.get("fingerprint_noise"), False)
     ident["fingerprint_screen_width"] = _int(ident.get("fingerprint_screen_width"), 1920, 320, 8192)
     ident["fingerprint_screen_height"] = _int(ident.get("fingerprint_screen_height"), 1080, 200, 8192)
@@ -208,12 +208,12 @@ def normalize_config(raw: dict[str, Any] | None) -> dict[str, Any]:
 
     net = cfg["network_location"]
     net["proxy"] = str(net.get("proxy") or "").strip()
-    net["geoip"] = _bool(net.get("geoip"), True)
-    net["timezone"] = str(net.get("timezone") or "").strip()
-    net["locale"] = str(net.get("locale") or "").strip()
-    net["webrtc_ip_mode"] = str(net.get("webrtc_ip_mode") or "auto").strip()
+    net["geoip"] = _bool(net.get("geoip"), False)
+    net["timezone"] = str(net.get("timezone") or "").strip() or _detect_timezone()
+    net["locale"] = str(net.get("locale") or "").strip() or _detect_locale()
+    net["webrtc_ip_mode"] = str(net.get("webrtc_ip_mode") or "disabled").strip()
     if net["webrtc_ip_mode"] not in {"auto", "disabled", "explicit"}:
-        net["webrtc_ip_mode"] = "auto"
+        net["webrtc_ip_mode"] = "disabled"
     net["webrtc_ip"] = str(net.get("webrtc_ip") or "").strip()
 
     adv = cfg["advanced"]
@@ -312,6 +312,45 @@ def _string_list(value: Any) -> list[str]:
             seen.add(text)
             out.append(text)
     return out
+
+
+def _detect_timezone() -> str:
+    env_tz = str(os.environ.get("TZ") or "").strip()
+    if env_tz and env_tz.upper() not in {"UTC0", "GMT0"}:
+        return env_tz
+    try:
+        text = Path("/etc/timezone").read_text(encoding="utf-8").strip()
+        if text:
+            return text
+    except Exception:
+        pass
+    try:
+        target = Path("/etc/localtime").resolve()
+        marker = "zoneinfo/"
+        target_text = str(target)
+        if marker in target_text:
+            return target_text.split(marker, 1)[1]
+    except Exception:
+        pass
+    return ""
+
+
+def _detect_locale() -> str:
+    for key in ("LC_ALL", "LC_MESSAGES", "LANG"):
+        locale = _normalize_locale(os.environ.get(key))
+        if locale:
+            return locale
+    return ""
+
+
+def _normalize_locale(value: Any) -> str:
+    raw = str(value or "").strip()
+    if not raw or raw.upper() in {"C", "POSIX"}:
+        return ""
+    raw = raw.split(".", 1)[0].split("@", 1)[0]
+    if not raw or raw.upper() in {"C", "POSIX"}:
+        return ""
+    return raw.replace("_", "-")
 
 
 def _redact_proxy(proxy: str) -> str:

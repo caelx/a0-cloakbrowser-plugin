@@ -12,3 +12,4 @@
 - Runtime and Playwright monkey patches are process-local; setup seeds dependencies/cache paths only.
 - Keep browser profiles, downloads, screenshots, cookies, and local storage untouched during uninstall.
 - Runtime code must not import test, CI, or planning files.
+- Headed `close_all` intentionally leaves one registered `about:blank` page alive.

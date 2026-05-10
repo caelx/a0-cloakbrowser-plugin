@@ -14,6 +14,17 @@ After install, enable `CloakBrowser`, then click the plugin's **Execute** button
 Execute installs or repairs dependencies, configures display support, installs
 configured extensions, syncs extension paths into `_browser`, and prints a
 human-readable readiness report. It is safe to click Execute multiple times.
+The equivalent noninteractive CLI setup flow is:
+
+```text
+https://github.com/caelx/a0-cloakbrowser-plugin.git
+```
+
+```bash
+cd /a0/usr/plugins/cloakbrowser
+python execute.py setup --noninteractive
+python execute.py status
+```
 
 The built-in `_browser` plugin may be disabled in the UI if you want to avoid
 duplicate Browser tool entries. CloakBrowser still relies on `_browser` runtime
@@ -32,9 +43,13 @@ python execute.py status --json
 
 Running `python execute.py` is the CLI equivalent of clicking Execute. Setup
 installs system browser/display/font packages when `apt-get` is available,
-installs `cloakbrowser[geoip]`, ensures the CloakBrowser binary, configures
-Xvfb, installs or updates configured extensions, and syncs extension paths into
-`_browser`. Default output is human-readable; use `--json` for CI or scripts.
+installs pinned `cloakbrowser[geoip]`, ensures the CloakBrowser binary,
+configures Xvfb, installs or updates configured extensions, and syncs extension
+paths into `_browser`. Default output is human-readable; use `--json` for CI or
+scripts. `repair` reruns setup over an existing install. `status` writes
+diagnostics for dependencies, display, extensions, runtime patch state, and
+effective config. `uninstall` removes plugin-managed setup files and leaves
+profiles and browser data intact.
 
 `hooks.py` is intentionally lightweight and does not install packages, patch
 Agent Zero, or remove files.
@@ -72,16 +87,29 @@ The runtime patch intentionally changes two `_browser` behaviors:
   Ghostship CloakBrowser behavior without editing Agent Zero source files.
 - In headed mode, the sole initial `about:blank` page is preserved so the visible
   CloakBrowser window is not closed during `_browser` startup.
+- In headed mode, `close_all` closes user pages but leaves one registered
+  `about:blank` page alive. Headless mode still delegates to upstream `_browser`
+  and full runtime shutdown still closes the browser process.
 
 Launch argument filtering is always on. The plugin drops conflicting
-`--disable-dev-shm-usage`, `--disable-gpu`, and bare `--disable-extensions`
-arguments while preserving `--disable-extensions-except` and `--load-extension`
-so configured extensions still load.
+`--disable-gpu`, duplicate explicit `--no-sandbox`, and bare
+`--disable-extensions` arguments while preserving
+`--disable-extensions-except` and `--load-extension`. Chromium's default
+`--disable-dev-shm-usage` fallback is intentionally allowed because headed
+CloakBrowser on constrained container shared memory can otherwise abort while
+allocating compositor shared images. Final launch switches are deduped by switch
+key, so duplicate switches such as `--no-sandbox --no-sandbox` are collapsed.
 
 Compared with the built-in `_browser`, this plugin keeps the same Browser tool
 surface but changes the launch backend, default headed display behavior,
 fingerprint/screen defaults, humanization, and extension provisioning. Browser
 profiles remain under Agent Zero's `tmp/browser/sessions`.
+
+Default network and identity settings avoid external geoip resolution:
+`geoip=false`, blank timezone/locale values are filled from the local process
+environment when possible, `webrtc_ip_mode=disabled`, and
+`fingerprint_platform=Windows`. The cookie annoyance extension update is enabled
+by default during setup.
 
 ## Display
 
@@ -137,12 +165,20 @@ process for the recorded display.
 ## Validation
 
 ```bash
-python -m pytest tests/unit
-python -m pytest tests/integration
+nix develop -c python -m pytest -s tests/unit
+nix develop -c python -m pytest -s tests/integration
 bash ci/run_agent_zero_integration.sh
 ```
 
-Docker-backed integration requires a working Docker engine.
+Docker-backed integration requires a working Docker engine. The default Docker
+integration uses `--shm-size=2g`; the CI matrix also runs a small-shm smoke with
+`64m` to prove the `--disable-dev-shm-usage` fallback remains active.
+See `docs/chill-penguin-crash-analysis.md` for the symbolicated production dump
+evidence behind this mitigation.
+
+The Nix flake dev shell provides Python, uv, pytest, ruff, gh, Docker client,
+Xvfb, Chromium diagnostics, native Chromium runtime libraries, and a pinned
+`cloakbrowser[geoip]` install in `.venv`.
 
 The Docker integration always runs deterministic local detection checks. Set
 `CLOAKBROWSER_LIVE_DETECTOR=1` to also collect live detector screenshots and
@@ -152,6 +188,13 @@ detector checks are artifact-producing by default, and CI enables
 the run. reCAPTCHA v3, 2captcha v3, and Turnstile are included in that strict
 live gate. Audio FP is skipped while its endpoint serves an expired TLS
 certificate.
+
+Integration output is captured to `artifacts/agent-zero-integration.log` and
+scanned for browser crash signatures including context-close warnings, asyncio
+cleanup tracebacks, `TargetClosedError`, and Python tracebacks. The heavy
+browsing smoke navigates 20 pages in one CloakBrowser session, captures DOM and
+screenshots, verifies the session remains alive, and writes
+`artifacts/heavy-browsing-results.json`.
 
 The uninstall smoke verifies extension cleanup, masquerade removal, patch state,
 and profile preservation. It records stock `_browser` launch verification as
