@@ -1,7 +1,7 @@
 name: cloakbrowser
 title: CloakBrowser
-description: CloakBrowser-backed overlay for Agent Zero's Browser tool.
-version: 1.0.0
+description: CloakBrowser-backed Browser overlay. After installing and enabling, click Execute to install or repair dependencies and report readiness.
+version: 1.1.0
 settings_sections:
   - external
 per_project_config: false
