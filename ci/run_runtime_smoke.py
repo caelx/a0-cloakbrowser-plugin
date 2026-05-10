@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 
 
-FORBIDDEN_ARGS = ("--disable-dev-shm-usage", "--disable-gpu", "--disable-extensions")
+FORBIDDEN_ARGS = ("--disable-gpu", "--disable-extensions")
 REQUIRED_ARGS = (
     "--fingerprint",
     "--fingerprint-noise=false",
@@ -56,6 +56,14 @@ async def main() -> int:
         for required in REQUIRED_ARGS:
             assert any(arg == required or arg.startswith(required + "=") for arg in final_args), required
         assert any(arg.startswith("--load-extension=") for arg in final_args)
+        main_commands = [
+            line for line in result["command_lines"]
+            if " --type=" not in line and "chrome" in line
+        ]
+        assert main_commands, "No main browser process command line found"
+        result["main_command_line"] = main_commands[0]
+        assert main_commands[0].count("--no-sandbox") == 1, main_commands[0]
+        assert main_commands[0].count("--disable-dev-shm-usage") == 1, main_commands[0]
         assert result["dimensions"] == {
             "innerWidth": 1920,
             "innerHeight": 1080,

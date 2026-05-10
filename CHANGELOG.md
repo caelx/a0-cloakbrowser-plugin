@@ -1,0 +1,14 @@
+# Changelog
+
+## Unreleased
+
+- Preserve one headed `about:blank` tab during Browser `close_all` to avoid
+  closing the visible CloakBrowser context.
+- Dedupe final Chrome launch switches and gate Docker integration logs on
+  browser crash signatures.
+- Preserve Chromium's `--disable-dev-shm-usage` fallback and assert browser
+  command lines do not emit duplicate `--no-sandbox`.
+- Add a Nix dev shell and Docker heavy browsing smoke that verifies 20
+  navigations in one CloakBrowser session.
+- Default geoip off, WebRTC IP disabled, fingerprint platform Windows, local
+  timezone/locale detection, and cookie-extension updates on setup.

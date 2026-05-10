@@ -35,6 +35,7 @@ def collect_status(config: dict[str, Any] | None = None) -> dict[str, Any]:
             "xdpyinfo": bool(shutil.which("xdpyinfo")),
             "xvfb": bool(shutil.which("Xvfb")),
             "supervisorctl": bool(shutil.which("supervisorctl")),
+            "shared_memory": shared_memory_status(),
         },
         "display": {
             "configured": cfg["runtime"]["display"],
@@ -109,3 +110,20 @@ def browser_status() -> dict[str, Any]:
         }
     except Exception as exc:
         return {"upstream_available": False, "error": str(exc)}
+
+
+def shared_memory_status(path: str = "/dev/shm") -> dict[str, Any]:
+    try:
+        stats = os.statvfs(path)
+    except OSError as exc:
+        return {"path": path, "available": False, "error": str(exc)}
+    total = stats.f_frsize * stats.f_blocks
+    free = stats.f_frsize * stats.f_bavail
+    return {
+        "path": path,
+        "available": True,
+        "total_bytes": total,
+        "free_bytes": free,
+        "total_mb": round(total / 1024 / 1024, 1),
+        "free_mb": round(free / 1024 / 1024, 1),
+    }

@@ -10,8 +10,12 @@ from .config import apply_environment, get_config
 from .extensions import active_extension_paths
 from .seed_playwright import ensure_masquerade
 
-DROP_EXACT = {"--disable-dev-shm-usage", "--disable-gpu", "--disable-extensions"}
+DROP_EXACT = {"--disable-dev-shm-usage", "--disable-gpu", "--disable-extensions", "--no-sandbox"}
 DROP_PREFIXES = ("--disable-dev-shm-usage=", "--disable-gpu=", "--disable-extensions=")
+IGNORE_DEFAULT_ADDITIONS = [
+    "--disable-gpu",
+    "--disable-extensions",
+]
 
 _STATE: dict[str, Any] = {
     "patched": False,
@@ -80,7 +84,21 @@ def filter_args(args: list[str] | tuple[str, ...] | None) -> tuple[list[str], li
             dropped.append(text)
         else:
             kept.append(text)
-    return kept, dropped
+    return dedupe_args(kept), dropped
+
+
+def dedupe_args(args: list[str] | tuple[str, ...] | None) -> list[str]:
+    deduped: list[str] = []
+    positions: dict[str, int] = {}
+    for arg in list(args or []):
+        text = str(arg)
+        key = _switch_key(text)
+        if key in positions:
+            deduped[positions[key]] = text
+            continue
+        positions[key] = len(deduped)
+        deduped.append(text)
+    return deduped
 
 
 def build_launch_overrides(kwargs: dict[str, Any], *, persistent: bool) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -100,6 +118,9 @@ def build_launch_overrides(kwargs: dict[str, Any], *, persistent: bool) -> tuple
     filtered_args.extend(_identity_args(cfg))
     filtered_args.extend(_extension_args(cfg))
     filtered_args.extend(cfg["advanced"]["extra_args"])
+    filtered_args, extra_dropped_args = filter_args(filtered_args)
+    dropped_args.extend(arg for arg in extra_dropped_args if arg not in dropped_args)
+    filtered_args = dedupe_args(filtered_args)
 
     proxy = cfg["network_location"]["proxy"] or None
     timezone = cfg["network_location"]["timezone"] or None
@@ -119,6 +140,7 @@ def build_launch_overrides(kwargs: dict[str, Any], *, persistent: bool) -> tuple
         locale=locale,
         headless=headless,
     )
+    final_args = [arg for arg in dedupe_args(final_args) if arg != "--no-sandbox"]
     launch_kwargs = dict(kwargs)
     launch_kwargs.pop("channel", None)
     launch_kwargs["executable_path"] = binary
@@ -126,7 +148,7 @@ def build_launch_overrides(kwargs: dict[str, Any], *, persistent: bool) -> tuple
     launch_kwargs["args"] = final_args
     launch_kwargs["ignore_default_args"] = _merge_ignore_default_args(
         kwargs.get("ignore_default_args"),
-        IGNORE_DEFAULT_ARGS + list(DROP_EXACT),
+        IGNORE_DEFAULT_ARGS + IGNORE_DEFAULT_ADDITIONS,
     )
     launch_kwargs["viewport"] = {
         "width": cfg["runtime"]["viewport_width"],
@@ -151,6 +173,9 @@ def build_launch_overrides(kwargs: dict[str, Any], *, persistent: bool) -> tuple
         "final_args": redact_args(final_args),
         "viewport": launch_kwargs["viewport"],
         "screen": launch_kwargs["screen"],
+        "shared_memory": {
+            "disable_dev_shm_usage": "--disable-dev-shm-usage" not in launch_kwargs["ignore_default_args"],
+        },
     }
     _STATE["last_launch"] = info
     return launch_kwargs, info
@@ -294,15 +319,22 @@ def _cloak_ignore_default_args(kwargs: dict[str, Any]):
     import cloakbrowser.browser as cloak_browser
 
     original = getattr(cloak_browser, "IGNORE_DEFAULT_ARGS", None)
+    original_stealth_args = getattr(cloak_browser, "get_default_stealth_args", None)
     if additions is True:
         merged: list[str] | bool = True
     else:
         merged = _merge_ignore_default_args(original or [], list(additions))
     cloak_browser.IGNORE_DEFAULT_ARGS = merged
+    if callable(original_stealth_args):
+        cloak_browser.get_default_stealth_args = _default_stealth_args_without_no_sandbox(
+            original_stealth_args
+        )
     try:
         yield
     finally:
         cloak_browser.IGNORE_DEFAULT_ARGS = original
+        if callable(original_stealth_args):
+            cloak_browser.get_default_stealth_args = original_stealth_args
 
 
 def _identity_args(cfg: dict[str, Any]) -> list[str]:
@@ -339,3 +371,16 @@ def _merge_ignore_default_args(existing: Any, additions: list[str]) -> list[str]
         if text not in merged:
             merged.append(text)
     return merged
+
+
+def _switch_key(arg: str) -> str:
+    if arg.startswith("--") and "=" in arg:
+        return arg.split("=", 1)[0]
+    return arg
+
+
+def _default_stealth_args_without_no_sandbox(original):
+    def wrapped():
+        return [arg for arg in original() if arg != "--no-sandbox"]
+
+    return wrapped

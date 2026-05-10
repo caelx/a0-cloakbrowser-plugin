@@ -30,7 +30,15 @@ def test_status_separates_setup_from_process_local_patches(monkeypatch):
     status = diagnostics.collect_status()
 
     assert status["setup"]["installed"] is True
+    assert status["environment"]["shared_memory"]["available"] is True
     assert status["patches"]["playwright_shim"]["setup_installed"] is True
     assert status["patches"]["playwright_shim"]["patched"] is False
     assert status["patches"]["runtime_patch"]["setup_installed"] is False
     assert status["patches"]["arg_filtering"] == "always_on"
+
+
+def test_shared_memory_status_reports_missing_path():
+    status = diagnostics.shared_memory_status("/path/that/does/not/exist")
+
+    assert status["available"] is False
+    assert status["path"] == "/path/that/does/not/exist"

@@ -19,7 +19,7 @@ humanization:
 identity:
   fingerprint_seed_mode: "random"
   fingerprint_seed: ""
-  fingerprint_platform: ""
+  fingerprint_platform: "Windows"
   fingerprint_noise: false
   fingerprint_screen_width: 1920
   fingerprint_screen_height: 1080
@@ -27,10 +27,10 @@ identity:
 
 network_location:
   proxy: ""
-  geoip: true
+  geoip: false
   timezone: ""
   locale: ""
-  webrtc_ip_mode: "auto"
+  webrtc_ip_mode: "disabled"
   webrtc_ip: ""
 
 advanced:
@@ -46,7 +46,7 @@ extensions:
   update_ublock_origin_lite_on_setup: false
   install_i_still_dont_care_about_cookies: true
   enable_i_still_dont_care_about_cookies: true
-  update_i_still_dont_care_about_cookies_on_setup: false
+  update_i_still_dont_care_about_cookies_on_setup: true
   install_bypass_paywalls_clean: false
   enable_bypass_paywalls_clean: false
   update_bypass_paywalls_clean_on_setup: false
