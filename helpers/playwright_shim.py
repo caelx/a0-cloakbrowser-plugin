@@ -266,7 +266,6 @@ def _cloak_launch_persistent_sync(user_data_dir: str | Path, kwargs: dict[str, A
 def _cloak_kwargs(kwargs: dict[str, Any]) -> dict[str, Any]:
     cleaned = dict(kwargs)
     cleaned.pop("executable_path", None)
-    cleaned.pop("ignore_default_args", None)
     return cleaned
 
 
