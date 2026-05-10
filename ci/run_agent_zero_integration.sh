@@ -8,6 +8,8 @@ repo="${CLOAKBROWSER_PLUGIN_REPO:-file:///plugin-src}"
 docker run --rm --shm-size=2g \
   -e CLOAKBROWSER_PLUGIN_REPO="$repo" \
   -e CLOAKBROWSER_LIVE_DETECTOR="${CLOAKBROWSER_LIVE_DETECTOR:-0}" \
+  -e CLOAKBROWSER_LIVE_DETECTOR_STRICT="${CLOAKBROWSER_LIVE_DETECTOR_STRICT:-0}" \
+  -e CLOAKBROWSER_UBOL_REQUIRE_LIVE_BLOCK="${CLOAKBROWSER_UBOL_REQUIRE_LIVE_BLOCK:-0}" \
   -v "$root:/plugin-src:ro" \
   -v "$root/artifacts:/artifacts" \
   "$image" \
