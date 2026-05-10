@@ -1,7 +1,16 @@
+import asyncio
 import sys
 from types import ModuleType
 
-from helpers.playwright_shim import _cloak_ignore_default_args, _cloak_kwargs, filter_args, should_patch_launch
+from helpers.playwright_shim import (
+    _IN_CLOAK_LAUNCH,
+    _STATE,
+    _cloak_ignore_default_args,
+    _cloak_kwargs,
+    _patch_class,
+    filter_args,
+    should_patch_launch,
+)
 
 
 def test_filter_args_drops_conflicts_but_keeps_extension_flags():
@@ -66,3 +75,41 @@ def test_cloak_ignore_default_args_patches_cloakbrowser_module(monkeypatch):
         ]
 
     assert browser_module.IGNORE_DEFAULT_ARGS == ["--enable-automation"]
+
+
+def test_patched_async_launch_bypasses_when_inside_cloak_launch():
+    calls = []
+
+    class BrowserType:
+        async def launch(self, **kwargs):
+            calls.append(("launch", kwargs))
+            return "browser"
+
+        async def launch_persistent_context(self, user_data_dir, **kwargs):
+            calls.append(("persistent", user_data_dir, kwargs))
+            return "context"
+
+    _STATE["async_originals"].pop(BrowserType, None)
+    _patch_class(BrowserType, async_mode=True)
+    token = _IN_CLOAK_LAUNCH.set(True)
+    try:
+        result = asyncio.run(
+            BrowserType().launch_persistent_context(
+                "/tmp/profile",
+                ignore_default_args=["--disable-dev-shm-usage"],
+                humanize=True,
+            )
+        )
+    finally:
+        _IN_CLOAK_LAUNCH.reset(token)
+        for name, original in _STATE["async_originals"].pop(BrowserType, {}).items():
+            setattr(BrowserType, name, original)
+
+    assert result == "context"
+    assert calls == [
+        (
+            "persistent",
+            "/tmp/profile",
+            {"ignore_default_args": ["--disable-dev-shm-usage"], "humanize": True},
+        )
+    ]
