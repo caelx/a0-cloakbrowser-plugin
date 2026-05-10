@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import inspect
 import random
 from contextvars import ContextVar
 from pathlib import Path

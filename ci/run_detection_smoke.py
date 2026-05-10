@@ -41,8 +41,12 @@ async def main() -> int:
     value = results.get("result", {})
     assert value.get("webdriver") is not True
     assert "HeadlessChrome" not in value.get("userAgent", "")
+    assert value.get("hasChrome") is True
+    assert int(value.get("plugins") or 0) > 0
     assert value.get("innerWidth") == 1920
+    assert value.get("innerHeight") == 1080
     assert value.get("screenWidth") == 1920
+    assert value.get("screenHeight") == 1080
     return 0
 
 

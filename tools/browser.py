@@ -12,7 +12,7 @@ for _parent in _ROOT.parents:
             sys.path.insert(0, _parent_str)
         break
 
-from plugins._browser.tools.browser import Browser as UpstreamBrowser
+from plugins._browser.tools.browser import Browser as UpstreamBrowser  # noqa: E402
 
 
 class Browser(UpstreamBrowser):

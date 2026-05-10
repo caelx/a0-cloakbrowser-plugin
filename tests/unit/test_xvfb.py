@@ -40,3 +40,29 @@ def test_ensure_display_allocates_alternate_when_preferred_socket_unusable(monke
     assert manifest["display"] == ":98"
     assert manifest["xvfb"]["attempts"][0]["display"] == ":99"
     json.dumps(manifest)
+
+
+def test_remove_direct_xvfb_requires_owned_matching_process(monkeypatch):
+    monkeypatch.setattr(xvfb, "_pid_matches_xvfb", lambda pid, display: pid == 123 and display == ":98")
+    signals = []
+    monkeypatch.setattr(xvfb.os, "kill", lambda pid, sig: signals.append((pid, sig)))
+    monkeypatch.setattr(xvfb, "_pid_exists", lambda pid: bool(signals) is False)
+
+    result = xvfb.remove_direct_xvfb_if_owned(
+        {"xvfb": {"managed_by": "cloakbrowser", "pid": 123, "display": ":98"}}
+    )
+
+    assert result["removed"] is True
+    assert result["signal"] == "TERM"
+    assert signals == [(123, xvfb.signal.SIGTERM)]
+
+
+def test_remove_direct_xvfb_ignores_unmatched_pid(monkeypatch):
+    monkeypatch.setattr(xvfb, "_pid_matches_xvfb", lambda pid, display: False)
+
+    result = xvfb.remove_direct_xvfb_if_owned(
+        {"xvfb": {"managed_by": "cloakbrowser", "pid": 123, "display": ":98"}}
+    )
+
+    assert result["removed"] is False
+    assert "pid did not match" in result["reason"]

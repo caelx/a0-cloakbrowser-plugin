@@ -124,7 +124,9 @@ python execute.py uninstall --noninteractive
 Uninstall disables plugin-managed `_browser` extension paths, removes in-process
 patches where possible, removes plugin-managed shim/supervisor files recorded in
 the install manifest, and preserves browser profiles, downloads, screenshots,
-cookies, and local storage.
+cookies, and local storage. If setup started a direct plugin-managed Xvfb
+process, uninstall terminates the recorded PID after verifying it is an Xvfb
+process for the recorded display.
 
 ## Validation
 
@@ -135,3 +137,17 @@ bash ci/run_agent_zero_integration.sh
 ```
 
 Docker-backed integration requires a working Docker engine.
+
+The Docker integration always runs deterministic local detection checks. Set
+`CLOAKBROWSER_LIVE_DETECTOR=1` to also collect live detector screenshots and
+JSON artifacts for public detection, fingerprint, header, and TLS pages. Live
+detector checks are artifact-producing by default, and CI enables
+`CLOAKBROWSER_LIVE_DETECTOR_STRICT=1` so third-party page probe failures fail
+the run. reCAPTCHA v3, 2captcha v3, and Turnstile are included in that strict
+live gate. Audio FP is skipped while its endpoint serves an expired TLS
+certificate.
+
+The uninstall smoke verifies extension cleanup, masquerade removal, patch state,
+and profile preservation. It records stock `_browser` launch verification as
+skipped because removing the masquerade can leave no stock Playwright Chromium
+installed in the Agent Zero image.

@@ -13,6 +13,7 @@ BASE_PACKAGES = [
     "fonts-wqy-zenhei",
     "fontconfig",
     "xvfb",
+    "x11-utils",
     "libatk-bridge2.0-0",
     "libatk1.0-0",
     "libatspi2.0-0",

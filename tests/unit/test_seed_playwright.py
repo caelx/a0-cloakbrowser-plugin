@@ -1,5 +1,3 @@
-from pathlib import Path
-
 from helpers import seed_playwright
 
 

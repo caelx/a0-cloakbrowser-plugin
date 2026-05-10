@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import signal
 import shutil
 import subprocess
 import time
@@ -174,3 +175,48 @@ def remove_supervisor_config_if_owned(manifest: dict[str, Any]) -> dict[str, Any
         SUPERVISOR_CONF.unlink()
         return {"removed": str(SUPERVISOR_CONF)}
     return {"removed": ""}
+
+
+def remove_direct_xvfb_if_owned(manifest: dict[str, Any]) -> dict[str, Any]:
+    recorded = manifest.get("xvfb", {})
+    if recorded.get("managed_by") != "cloakbrowser":
+        return {"removed": False, "reason": "not cloakbrowser-managed direct Xvfb"}
+    pid = int(recorded.get("pid") or 0)
+    display = str(recorded.get("display") or "")
+    if not pid:
+        return {"removed": False, "reason": "no recorded pid"}
+    if not _pid_matches_xvfb(pid, display):
+        return {"removed": False, "pid": pid, "display": display, "reason": "pid did not match recorded Xvfb"}
+    try:
+        os.kill(pid, signal.SIGTERM)
+    except ProcessLookupError:
+        return {"removed": True, "pid": pid, "display": display, "already_exited": True}
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        if not _pid_exists(pid):
+            return {"removed": True, "pid": pid, "display": display, "signal": "TERM"}
+        time.sleep(0.1)
+    try:
+        os.kill(pid, signal.SIGKILL)
+    except ProcessLookupError:
+        return {"removed": True, "pid": pid, "display": display, "signal": "TERM"}
+    return {"removed": True, "pid": pid, "display": display, "signal": "KILL"}
+
+
+def _pid_matches_xvfb(pid: int, display: str) -> bool:
+    try:
+        raw = Path(f"/proc/{pid}/cmdline").read_bytes()
+    except OSError:
+        return False
+    cmdline = raw.replace(b"\0", b" ").decode("utf-8", "replace")
+    return "Xvfb" in cmdline and bool(display) and display in cmdline
+
+
+def _pid_exists(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True

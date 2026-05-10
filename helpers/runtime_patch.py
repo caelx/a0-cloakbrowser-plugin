@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import sys
 from contextlib import contextmanager
 from pathlib import Path
@@ -56,7 +55,9 @@ def apply_runtime_patch() -> dict[str, Any]:
                     return await original_page_close(page, *args, **kwargs)
 
                 Page.close = _close_preserving_sole_placeholder
-                restore_page_close = lambda: setattr(Page, "close", original_page_close)
+
+                def restore_page_close():
+                    setattr(Page, "close", original_page_close)
             except Exception:
                 restore_page_close = None
         try:
