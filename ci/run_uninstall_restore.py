@@ -22,7 +22,7 @@ def main() -> int:
     runtime_profile = Path("/git/agent-zero/tmp/browser/sessions/cloakbrowser-runtime-ci")
     before_config = get_browser_config()
     result = subprocess.run(
-        ["python", str(Path(plugin_dir) / "execute.py"), "uninstall", "--noninteractive"],
+        ["python", str(Path(plugin_dir) / "execute.py"), "uninstall", "--noninteractive", "--json"],
         check=False,
         capture_output=True,
         text=True,

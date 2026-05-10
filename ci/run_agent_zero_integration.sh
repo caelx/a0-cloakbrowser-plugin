@@ -37,8 +37,9 @@ PY
     test -n "$plugin_dir"
     cd "$plugin_dir"
     ln -sfn /artifacts artifacts
-    python execute.py setup --noninteractive
-    python execute.py status > /artifacts/plugin-status.json
+    python execute.py --json
+    python execute.py status --json > /artifacts/plugin-status.json
+    python execute.py --json > /artifacts/plugin-execute-repeat.json
     python ci/collect_versions.py
     python ci/run_extension_smoke.py
     python ci/run_browser_tool_smoke.py

@@ -10,12 +10,10 @@ browser sessions use CloakBrowser.
 ## Install
 
 In Agent Zero, use the Plugin Installer Git workflow with this repository URL.
-After install, enable `CloakBrowser` and run setup:
-
-```bash
-cd /a0/usr/plugins/cloakbrowser
-python execute.py setup --noninteractive
-```
+After install, enable `CloakBrowser`, then click the plugin's **Execute** button.
+Execute installs or repairs dependencies, configures display support, installs
+configured extensions, syncs extension paths into `_browser`, and prints a
+human-readable readiness report. It is safe to click Execute multiple times.
 
 The built-in `_browser` plugin may be disabled in the UI if you want to avoid
 duplicate Browser tool entries. CloakBrowser still relies on `_browser` runtime
@@ -24,15 +22,19 @@ code and extension configuration.
 ## Commands
 
 ```bash
+python execute.py
 python execute.py status
 python execute.py setup --noninteractive
 python execute.py repair --noninteractive
 python execute.py uninstall --noninteractive
+python execute.py status --json
 ```
 
-Setup installs system browser/display/font packages when `apt-get` is available,
-installs `cloakbrowser[geoip]`, ensures the CloakBrowser binary, configures Xvfb,
-installs configured extensions, and syncs extension paths into `_browser`.
+Running `python execute.py` is the CLI equivalent of clicking Execute. Setup
+installs system browser/display/font packages when `apt-get` is available,
+installs `cloakbrowser[geoip]`, ensures the CloakBrowser binary, configures
+Xvfb, installs or updates configured extensions, and syncs extension paths into
+`_browser`. Default output is human-readable; use `--json` for CI or scripts.
 
 `hooks.py` is intentionally lightweight and does not install packages, patch
 Agent Zero, or remove files.
@@ -57,7 +59,7 @@ installed first. At launch time, `helpers/playwright_shim.py` still patches
 Playwright's Chromium `launch` and `launch_persistent_context` methods in the
 current process and replaces the executable with `cloakbrowser.ensure_binary()`.
 
-Runtime patching is process-local. `execute.py setup` installs dependencies,
+Runtime patching is process-local. The Execute flow installs dependencies,
 extensions, display support, and the Playwright cache masquerade; it does not
 permanently rewrite Agent Zero runtime files. The Browser tool process applies
 the runtime patch before first use. Diagnostics distinguish setup-installed
@@ -109,6 +111,10 @@ The plugin supports unpacked Chromium extension folders under
   `edibdbjcniadpccecjdfdjjppcpchdlm`.
 - Bypass Paywalls Clean is opt-in and installs from the supplied GitFlic zip:
   `https://gitflic.ru/project/magnolia1234/bpc_uploads/blob/raw?file=bypass-paywalls-chrome-clean-master.zip`.
+
+Execute reuses installed extensions by default. If an extension's
+`update_*_on_setup` config option is enabled, Execute refreshes that extension
+during setup and reports it as updated.
 
 No paid-content bypass tests are run. CI only validates installation, manifest
 loading, enable/disable behavior, and launch argument inclusion.
