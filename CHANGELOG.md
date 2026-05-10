@@ -12,3 +12,5 @@
   navigations in one CloakBrowser session.
 - Default geoip off, WebRTC IP disabled, fingerprint platform Windows, local
   timezone/locale detection, and cookie-extension updates on setup.
+- Make the upstream canary validate uBOL's installed static DNR rules instead
+  of requiring flaky live ad-network blocks.
