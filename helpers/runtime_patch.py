@@ -12,6 +12,8 @@ _STATE: dict[str, Any] = {
     "original_start": None,
 }
 
+AGENT_ZERO_FALLBACK_DIR = Path("/git/agent-zero")
+
 
 def apply_runtime_patch() -> dict[str, Any]:
     if _STATE["patched"]:
@@ -103,11 +105,14 @@ def _agent_zero_import_context():
             removed_entries.append((index, entry))
             sys.path.pop(index)
 
-    for parent in root.parents:
-        if (parent / "plugins" / "_browser").is_dir() and (parent / "helpers" / "tool.py").is_file():
-            parent_str = str(parent)
-            if parent_str not in sys.path:
-                sys.path.insert(0, parent_str)
+    for candidate in (*root.parents, AGENT_ZERO_FALLBACK_DIR):
+        if (
+            (candidate / "plugins" / "_browser").is_dir()
+            and (candidate / "helpers" / "tool.py").is_file()
+        ):
+            candidate_str = str(candidate)
+            if candidate_str not in sys.path:
+                sys.path.insert(0, candidate_str)
             break
 
     try:

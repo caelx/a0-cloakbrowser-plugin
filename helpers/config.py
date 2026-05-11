@@ -9,6 +9,7 @@ from typing import Any
 PLUGIN_NAME = "cloakbrowser"
 PLUGIN_TITLE = "CloakBrowser"
 MANIFEST_NAME = ".cloakbrowser-install-manifest.json"
+MATERIALIZED_PLUGIN_DIR = Path("/a0") / "usr" / "plugins" / PLUGIN_NAME
 
 BPC_SOURCE_URL = (
     "https://gitflic.ru/project/magnolia1234/bpc_uploads/blob/raw"
@@ -99,6 +100,11 @@ DEFAULT_CONFIG: dict[str, Any] = {
 
 
 def plugin_dir() -> Path:
+    local_root = Path(__file__).resolve().parents[1]
+    if local_root == MATERIALIZED_PLUGIN_DIR:
+        return local_root
+    if MATERIALIZED_PLUGIN_DIR.is_dir():
+        return MATERIALIZED_PLUGIN_DIR
     try:
         from helpers import plugins
 

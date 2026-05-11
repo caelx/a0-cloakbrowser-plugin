@@ -1,4 +1,5 @@
-from helpers.config import normalize_config, redacted_config
+from helpers import config
+from helpers.config import normalize_config, plugin_dir, redacted_config
 
 
 def test_normalize_config_defaults_and_invalid_values(monkeypatch):
@@ -64,3 +65,11 @@ def test_redacted_config_hides_proxy_credentials():
     cfg = redacted_config({"network_location": {"proxy": "http://user:pass@example.com:8080"}})
 
     assert cfg["network_location"]["proxy"] == "http://<redacted>@example.com:8080"
+
+
+def test_plugin_dir_prefers_materialized_a0_root(monkeypatch, tmp_path):
+    materialized = tmp_path / "a0" / "usr" / "plugins" / "cloakbrowser"
+    materialized.mkdir(parents=True)
+    monkeypatch.setattr(config, "MATERIALIZED_PLUGIN_DIR", materialized)
+
+    assert plugin_dir() == materialized

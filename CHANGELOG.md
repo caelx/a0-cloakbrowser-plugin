@@ -24,6 +24,9 @@
   command lines do not emit duplicate `--no-sandbox`.
 - Document that production headed CloakBrowser containers should provide at
   least `2 GB` of `/dev/shm`.
+- Prefer the materialized `/a0/usr/plugins/cloakbrowser` root for setup state
+  and runtime loading so manifests and managed extensions never drift under
+  `/git/agent-zero`.
 - Add a Nix dev shell and Docker heavy browsing smoke that verifies 20
   navigations in one CloakBrowser session.
 - Fingerprint platform Windows and cookie-extension updates remain enabled on

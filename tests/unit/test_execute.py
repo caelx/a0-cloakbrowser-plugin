@@ -17,6 +17,21 @@ def _status():
     }
 
 
+def test_ensure_agent_zero_path_uses_git_fallback_for_materialized_plugin(monkeypatch, tmp_path):
+    root = tmp_path / "a0" / "usr" / "plugins" / "cloakbrowser"
+    root.mkdir(parents=True)
+    fallback = tmp_path / "git" / "agent-zero"
+    (fallback / "plugins" / "_browser").mkdir(parents=True)
+    (fallback / "helpers").mkdir()
+    (fallback / "helpers" / "tool.py").write_text("", encoding="utf-8")
+    monkeypatch.setattr(plugin_imports, "AGENT_ZERO_FALLBACK_DIR", fallback)
+    monkeypatch.setattr(sys, "path", [str(root)])
+
+    plugin_imports.ensure_agent_zero_path(root)
+
+    assert sys.path[0] == str(fallback)
+
+
 def test_no_arg_execute_runs_setup_then_status_human_readable(monkeypatch, capsys):
     calls = []
 

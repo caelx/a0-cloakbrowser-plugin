@@ -22,14 +22,19 @@ SOURCE_RUNTIME_HELPER = f"""
 # {PATCH_MARKER}: start
 def _cloakbrowser_source_runtime():
     try:
-        from helpers import plugins as _cloakbrowser_plugins
+        from pathlib import Path as _cloakbrowser_path
+        import sys as _cloakbrowser_sys
 
-        _cloakbrowser_dir = _cloakbrowser_plugins.find_plugin_dir("cloakbrowser")
-        if _cloakbrowser_dir:
-            import sys as _cloakbrowser_sys
+        _cloakbrowser_dir = None
+        _cloakbrowser_materialized = _cloakbrowser_path("/a0/usr/plugins/cloakbrowser")
+        if _cloakbrowser_materialized.is_dir():
+            _cloakbrowser_dir = str(_cloakbrowser_materialized)
+        else:
+            from helpers import plugins as _cloakbrowser_plugins
 
-            if _cloakbrowser_dir not in _cloakbrowser_sys.path:
-                _cloakbrowser_sys.path.insert(0, _cloakbrowser_dir)
+            _cloakbrowser_dir = _cloakbrowser_plugins.find_plugin_dir("cloakbrowser")
+        if _cloakbrowser_dir and _cloakbrowser_dir not in _cloakbrowser_sys.path:
+            _cloakbrowser_sys.path.insert(0, _cloakbrowser_dir)
         from plugin_imports import plugin_import as _cloakbrowser_plugin_import
 
         return _cloakbrowser_plugin_import("helpers.source_runtime")
