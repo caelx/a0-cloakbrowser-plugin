@@ -37,7 +37,6 @@ advanced:
   extra_args: []
   filter_default_playwright_args: true
   disable_shadow_dom_init_patch: true
-  preserve_headed_placeholder_page: false
   patch_runtime_file_if_needed: true
 
 extensions:

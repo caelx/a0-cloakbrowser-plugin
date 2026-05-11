@@ -8,6 +8,9 @@
 - Exact-dedupe managed extension paths and document live stale-data reset.
 - Align headed tab close behavior with upstream `_browser`; `close_all` no
   longer preserves or respawns a plugin-managed `about:blank` tab.
+- Keep CloakBrowser's unregistered startup target only until `open` turns it
+  into the requested first visible Browser page, and restart once from `open`
+  when an empty/stale context cannot create a new tab.
 - Restore the old Ghostship CloakBrowser profile defaults: 1440x960
   display/viewport/fingerprint dimensions, GeoIP enabled, WebRTC IP auto, and
   no fixed UTC timezone fallback.
@@ -19,6 +22,8 @@
   browser crash signatures.
 - Preserve Chromium's `--disable-dev-shm-usage` fallback and assert browser
   command lines do not emit duplicate `--no-sandbox`.
+- Document that production headed CloakBrowser containers should provide at
+  least `2 GB` of `/dev/shm`.
 - Add a Nix dev shell and Docker heavy browsing smoke that verifies 20
   navigations in one CloakBrowser session.
 - Fingerprint platform Windows and cookie-extension updates remain enabled on

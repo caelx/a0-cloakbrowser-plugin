@@ -30,7 +30,7 @@ def test_normalize_config_defaults_and_invalid_values(monkeypatch):
     assert cfg["bypass_paywalls_clean"]["opt_in_setcookie"] is True
     assert cfg["bypass_paywalls_clean"]["opt_in_custom_sites"] is True
     assert cfg["bypass_paywalls_clean"]["opt_in_update"] is True
-    assert cfg["advanced"]["preserve_headed_placeholder_page"] is False
+    assert "preserve_headed_placeholder_page" not in cfg["advanced"]
     assert cfg["advanced"]["extra_args"] == ["--foo", "--bar"]
 
 

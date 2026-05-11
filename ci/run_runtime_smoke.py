@@ -73,7 +73,7 @@ async def main() -> int:
         result["main_command_line"] = main_commands[0]
         assert "--enable-automation" not in main_commands[0], main_commands[0]
         assert main_commands[0].count("--no-sandbox") == 1, main_commands[0]
-        assert main_commands[0].count("--disable-dev-shm-usage") == 1, main_commands[0]
+        assert "--disable-dev-shm-usage" not in main_commands[0], main_commands[0]
         assert result["dimensions"] == {
             "innerWidth": 1440,
             "innerHeight": 960,

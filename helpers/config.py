@@ -56,7 +56,6 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "extra_args": [],
         "filter_default_playwright_args": True,
         "disable_shadow_dom_init_patch": True,
-        "preserve_headed_placeholder_page": False,
         "patch_runtime_file_if_needed": True,
     },
     "extensions": {
@@ -239,9 +238,7 @@ def normalize_config(raw: dict[str, Any] | None) -> dict[str, Any]:
     adv["extra_args"] = _string_list(adv.get("extra_args"))
     adv["filter_default_playwright_args"] = _bool(adv.get("filter_default_playwright_args"), True)
     adv["disable_shadow_dom_init_patch"] = _bool(adv.get("disable_shadow_dom_init_patch"), True)
-    adv["preserve_headed_placeholder_page"] = _bool(
-        adv.get("preserve_headed_placeholder_page"), False
-    )
+    adv.pop("preserve_headed_placeholder_page", None)
     adv["patch_runtime_file_if_needed"] = _bool(adv.get("patch_runtime_file_if_needed"), True)
 
     for key, default in DEFAULT_CONFIG["extensions"].items():

@@ -48,16 +48,20 @@ Agent Zero/CloakBrowser paths.
 The observed tab disappearance is consistent with Chromium aborting inside
 renderer/compositor memory allocation on Linux aarch64. The host having 64 GB of
 RAM does not rule this out, because Chromium shared-image paths are sensitive to
-container shared-memory configuration and the previous launch filtering removed
-Playwright's `/dev/shm` fallback switch.
+container shared-memory configuration. The fixed production profile provisions
+large shared memory instead of leaning on Playwright's `/dev/shm` fallback
+switch.
 
 The stability fix is therefore:
 
-- preserve Playwright's `--disable-dev-shm-usage` fallback unless explicitly
-  disabled;
+- remove Playwright's default `--disable-dev-shm-usage` switch from the normal
+  production profile;
 - dedupe final launch switches so only one `--no-sandbox` reaches Chromium;
 - record `/dev/shm` diagnostics in plugin status;
 - run Docker integration with a large-shm default and a small-shm regression
-  smoke;
-- keep the headed `close_all` placeholder-tab patch as a separate fix for
-  Browser-tool session lifetime, not as the primary crash fix.
+  smoke.
+
+Production headed CloakBrowser containers should still provide at least `2 GB`
+of `/dev/shm`, for example Docker or Podman `--shm-size=2g`. The
+`--disable-dev-shm-usage` switch is only a constrained-environment fallback, not
+the preferred production memory configuration.

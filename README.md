@@ -85,22 +85,28 @@ and is restored on uninstall only when the current file still matches the
 plugin-patched hash. Process-local runtime and Playwright monkey patches remain
 as fallback support for smoke tests and development runs.
 
-The runtime patch intentionally changes one `_browser` behavior:
+The runtime patch intentionally changes only the `_browser` seams CloakBrowser
+needs:
 
 - The open-shadow-DOM init script is replaced with a no-op when
   `advanced.disable_shadow_dom_init_patch` is enabled. This matches the effective
   Ghostship CloakBrowser behavior without editing Agent Zero source files.
-Headed tab lifecycle, `about:blank`, annotation, input forwarding, and
-`close_all` behavior remain owned by upstream `_browser`.
+- CloakBrowser 0.3.27 cannot create a new tab after the sole startup target has
+  been closed, so the patch keeps that unregistered startup target only until
+  `open` turns it into the requested first visible Browser page. `close_all`
+  still returns the upstream empty Browser list and does not respawn a tab.
+
+Annotation, input forwarding, visible tab selection, screenshots, and Browser UI
+rendering remain owned by upstream `_browser`.
 
 Launch argument filtering is always on. The plugin drops conflicting
 `--disable-gpu`, duplicate explicit `--no-sandbox`, and bare
 `--disable-extensions` arguments while preserving
 `--disable-extensions-except` and `--load-extension`. Chromium's default
-`--disable-dev-shm-usage` fallback is intentionally allowed because headed
-CloakBrowser on constrained container shared memory can otherwise abort while
-allocating compositor shared images. Final launch switches are deduped by switch
-key, so duplicate switches such as `--no-sandbox --no-sandbox` are collapsed.
+`--disable-dev-shm-usage` fallback is removed for the normal production profile;
+provide at least `2 GB` of `/dev/shm` instead. Final launch switches are deduped
+by switch key, so duplicate switches such as `--no-sandbox --no-sandbox` are
+collapsed.
 
 Compared with the built-in `_browser`, this plugin keeps the same Browser tool
 surface but changes the launch backend, default headed display behavior,
@@ -184,8 +190,11 @@ bash ci/run_agent_zero_integration.sh
 ```
 
 Docker-backed integration requires a working Docker engine. The default Docker
-integration uses `--shm-size=2g`; the CI matrix also runs a small-shm smoke with
-`64m` to prove the `--disable-dev-shm-usage` fallback remains active.
+integration uses `--shm-size=2g`; production containers should provide at least
+`2 GB` of `/dev/shm` for headed CloakBrowser, for example Docker or Podman
+`--shm-size=2g`. The CI matrix also runs a small-shm smoke with `64m` to prove
+the browser starts with constrained shared memory when explicitly configured for
+that environment.
 See `docs/chill-penguin-crash-analysis.md` for the symbolicated production dump
 evidence behind this mitigation.
 

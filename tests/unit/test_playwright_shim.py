@@ -86,7 +86,7 @@ def test_build_launch_overrides_drops_explicit_no_sandbox(monkeypatch):
     assert "--no-sandbox" not in launch_kwargs["args"]
     assert "--no-sandbox" not in launch_kwargs["ignore_default_args"]
     assert "--disable-dev-shm-usage" not in launch_kwargs["args"]
-    assert "--disable-dev-shm-usage" not in launch_kwargs["ignore_default_args"]
+    assert "--disable-dev-shm-usage" in launch_kwargs["ignore_default_args"]
 
 
 def test_build_launch_overrides_uses_old_working_profile_defaults(monkeypatch):
@@ -128,12 +128,19 @@ def test_build_launch_overrides_uses_old_working_profile_defaults(monkeypatch):
     monkeypatch.setattr(playwright_shim, "apply_environment", lambda _cfg: None)
     monkeypatch.setattr(playwright_shim, "get_config", lambda: normalize_config({}))
     monkeypatch.setattr(playwright_shim, "active_extension_paths", lambda _cfg: [])
+    monkeypatch.setattr(
+        playwright_shim,
+        "_resolve_public_geoip",
+        lambda: {
+            "timezone": "America/New_York",
+            "locale": "en-US",
+            "ip": "203.0.113.10",
+        },
+    )
 
     launch_kwargs, _info = playwright_shim.build_launch_overrides({}, persistent=True)
 
-    assert geoip_calls == [
-        {"geoip": True, "proxy": None, "timezone": None, "locale": None}
-    ]
+    assert geoip_calls == []
     assert launch_kwargs["headless"] is False
     assert launch_kwargs["viewport"] == {"width": 1440, "height": 960}
     assert launch_kwargs["screen"] == {"width": 1440, "height": 960}
@@ -144,6 +151,69 @@ def test_build_launch_overrides_uses_old_working_profile_defaults(monkeypatch):
     assert "--fingerprint-timezone=America/New_York" in launch_kwargs["args"]
     assert "--fingerprint-locale=en-US" in launch_kwargs["args"]
     assert "--fingerprint-webrtc-ip=203.0.113.10" in launch_kwargs["args"]
+
+
+def test_build_launch_overrides_uses_cloakbrowser_geoip_for_proxy(monkeypatch):
+    from helpers import playwright_shim
+    from helpers.config import normalize_config
+
+    geoip_calls = []
+    package = ModuleType("cloakbrowser")
+    package.ensure_binary = lambda: "/opt/cloakbrowser/chrome"
+    browser_module = ModuleType("cloakbrowser.browser")
+
+    def maybe_resolve_geoip(geoip, proxy, timezone, locale):
+        geoip_calls.append(
+            {
+                "geoip": geoip,
+                "proxy": proxy,
+                "timezone": timezone,
+                "locale": locale,
+            }
+        )
+        return "America/Chicago", "en-US", "198.51.100.10"
+
+    def build_args(_stealth, args, **kwargs):
+        out = list(args)
+        if kwargs.get("timezone"):
+            out.append(f"--fingerprint-timezone={kwargs['timezone']}")
+        if kwargs.get("locale"):
+            out.append(f"--fingerprint-locale={kwargs['locale']}")
+        return out
+
+    browser_module.build_args = build_args
+    browser_module.maybe_resolve_geoip = maybe_resolve_geoip
+    config_module = ModuleType("cloakbrowser.config")
+    config_module.IGNORE_DEFAULT_ARGS = []
+    monkeypatch.setitem(sys.modules, "cloakbrowser", package)
+    monkeypatch.setitem(sys.modules, "cloakbrowser.browser", browser_module)
+    monkeypatch.setitem(sys.modules, "cloakbrowser.config", config_module)
+    monkeypatch.setattr(playwright_shim, "ensure_masquerade", lambda _binary: None)
+    monkeypatch.setattr(playwright_shim, "apply_environment", lambda _cfg: None)
+    monkeypatch.setattr(playwright_shim, "active_extension_paths", lambda _cfg: [])
+    monkeypatch.setattr(
+        playwright_shim,
+        "get_config",
+        lambda: normalize_config({"network_location": {"proxy": "http://proxy.test:8080"}}),
+    )
+    monkeypatch.setattr(
+        playwright_shim,
+        "_resolve_public_geoip",
+        lambda: {"timezone": "America/New_York", "locale": "en-US", "ip": "203.0.113.10"},
+    )
+
+    launch_kwargs, _info = playwright_shim.build_launch_overrides({}, persistent=True)
+
+    assert geoip_calls == [
+        {
+            "geoip": True,
+            "proxy": "http://proxy.test:8080",
+            "timezone": None,
+            "locale": None,
+        }
+    ]
+    assert "--fingerprint-timezone=America/Chicago" in launch_kwargs["args"]
+    assert "--fingerprint-webrtc-ip=198.51.100.10" in launch_kwargs["args"]
 
 
 def test_agent_zero_managed_browser_path_is_patched():

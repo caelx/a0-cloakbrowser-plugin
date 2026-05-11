@@ -23,8 +23,9 @@ async def main() -> int:
     artifacts = Path(os.environ.get("CLOAKBROWSER_ARTIFACTS_DIR") or "artifacts")
     artifacts.mkdir(parents=True, exist_ok=True)
     screenshot = artifacts / "ziperto-probe.png"
+    wait_ms = int(os.environ.get("CLOAKBROWSER_ZIPERTO_WAIT_MS") or "20000")
     started = time.monotonic()
-    result: dict[str, Any] = {"url": ZIPERTO_URL, "screenshot": str(screenshot)}
+    result: dict[str, Any] = {"url": ZIPERTO_URL, "screenshot": str(screenshot), "wait_ms": wait_ms}
 
     apply_runtime_patch()
     patch_playwright()
@@ -34,7 +35,7 @@ async def main() -> int:
         browser_id = opened["id"]
         page = core.pages[browser_id].page
         page.set_default_timeout(30000)
-        await page.wait_for_timeout(20000)
+        await page.wait_for_timeout(wait_ms)
         title = await page.title()
         text = await page.locator("body").inner_text(timeout=5000)
         environment = await page.evaluate(

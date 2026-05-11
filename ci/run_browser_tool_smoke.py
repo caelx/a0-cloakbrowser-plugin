@@ -12,6 +12,7 @@ from urllib.parse import quote
 
 async def main() -> int:
     sys.path.insert(0, "/git/agent-zero")
+    from plugins._browser.helpers import runtime as browser_runtime
     from usr.plugins.cloakbrowser.tools.browser import Browser
 
     class Log:
@@ -165,6 +166,13 @@ async def main() -> int:
     Path("artifacts/browser-tool-results.json").write_text(
         json.dumps(results, indent=2) + "\n", encoding="utf-8"
     )
+    runtime = await browser_runtime.get_runtime(agent.context.id, create=False)
+    if runtime:
+        await runtime.call("close", delete_profile=False)
+        runtime._closed = True
+        with browser_runtime._runtime_lock:
+            browser_runtime._runtimes.pop(agent.context.id, None)
+    await asyncio.sleep(0.25)
     return 0
 
 

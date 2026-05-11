@@ -109,7 +109,6 @@ def test_shadow_dom_script_is_noop_and_restored(monkeypatch):
         lambda: {
             "advanced": {
                 "disable_shadow_dom_init_patch": True,
-                "preserve_headed_placeholder_page": False,
             },
             "runtime": {"headed": True},
         },
@@ -135,7 +134,6 @@ def test_headed_close_all_delegates_upstream(monkeypatch):
         lambda: {
             "advanced": {
                 "disable_shadow_dom_init_patch": True,
-                "preserve_headed_placeholder_page": False,
             },
             "runtime": {"headed": True},
         },
@@ -164,7 +162,6 @@ def test_headed_close_all_does_not_create_placeholder_when_missing(monkeypatch):
         lambda: {
             "advanced": {
                 "disable_shadow_dom_init_patch": True,
-                "preserve_headed_placeholder_page": False,
             },
             "runtime": {"headed": True},
         },
@@ -192,7 +189,6 @@ def test_headed_close_all_browsers_delegates_upstream(monkeypatch):
         lambda: {
             "advanced": {
                 "disable_shadow_dom_init_patch": True,
-                "preserve_headed_placeholder_page": False,
             },
             "runtime": {"headed": True},
         },
@@ -220,7 +216,6 @@ def test_headless_close_all_delegates_upstream(monkeypatch):
         lambda: {
             "advanced": {
                 "disable_shadow_dom_init_patch": True,
-                "preserve_headed_placeholder_page": False,
             },
             "runtime": {"headed": False},
         },
@@ -245,7 +240,6 @@ def test_unpatch_restores_original_close_all(monkeypatch):
         lambda: {
             "advanced": {
                 "disable_shadow_dom_init_patch": True,
-                "preserve_headed_placeholder_page": False,
             },
             "runtime": {"headed": True},
         },
