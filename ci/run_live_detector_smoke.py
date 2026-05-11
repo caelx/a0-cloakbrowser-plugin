@@ -161,14 +161,14 @@ def target_checks(target: LiveTarget, result: dict[str, Any]) -> list[dict[str, 
             "HeadlessChrome" not in str(result["environment"].get("userAgent", "")),
         ),
         check(
-            "viewport is 1920x1080",
-            result["environment"].get("innerWidth") == 1920
-            and result["environment"].get("innerHeight") == 1080,
+            "viewport is 1440x960",
+            result["environment"].get("innerWidth") == 1440
+            and result["environment"].get("innerHeight") == 960,
         ),
         check(
-            "screen is 1920x1080",
-            result["environment"].get("screenWidth") == 1920
-            and result["environment"].get("screenHeight") == 1080,
+            "screen is 1440x960",
+            result["environment"].get("screenWidth") == 1440
+            and result["environment"].get("screenHeight") == 960,
         ),
     ]
     if target.name == "httpbin-headers":

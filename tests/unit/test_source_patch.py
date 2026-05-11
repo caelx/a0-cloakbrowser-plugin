@@ -15,7 +15,13 @@ def test_patch_runtime_source_applies_and_records(monkeypatch, tmp_path):
     assert result["applied"] is True
     assert result["already_patched"] is False
     assert result["original_hash"] != result["patched_hash"]
-    assert source_patch.PATCH_MARKER in runtime.read_text(encoding="utf-8")
+    patched_text = runtime.read_text(encoding="utf-8")
+    assert source_patch.PATCH_MARKER in patched_text
+    assert "preserve_headed_placeholder" not in patched_text
+    assert "close_all_preserving_placeholder" not in patched_text
+    assert "if len(self.context.pages) == 1:" in patched_text
+    assert "for candidate in list(self.context.pages):" in patched_text
+    assert "Browser context could not open a new tab; restarting." in patched_text
     assert manifest["runtime_source_patch"]["target_path"] == str(runtime)
     assert manifest["runtime_patches"][0]["kind"] == "source_runtime"
 
@@ -79,6 +85,18 @@ class _BrowserRuntimeCore:
                     pass
                 continue
             await self._register_page(page)
+
+    async def open(self, url: str = "") -> dict[str, Any]:
+        await self.ensure_started()
+        page = await self.context.new_page()
+        browser_page = await self._register_page(page)
+        self.last_interacted_browser_id = browser_page.id
+        target_url = self._initial_url(url)
+        if target_url and target_url != "about:blank":
+            await self._goto(page, normalize_url(target_url))
+        else:
+            await self._settle(page)
+        return {"id": browser_page.id, "state": await self._state(browser_page.id)}
 
     async def close_all_browsers(self) -> dict[str, Any]:
         await self.ensure_started()

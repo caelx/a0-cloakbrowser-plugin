@@ -23,11 +23,11 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "display": ":99",
         "auto_start_xvfb": True,
         "reuse_existing_display": True,
-        "display_width": 1920,
-        "display_height": 1080,
+        "display_width": 1440,
+        "display_height": 960,
         "display_depth": 24,
-        "viewport_width": 1920,
-        "viewport_height": 1080,
+        "viewport_width": 1440,
+        "viewport_height": 960,
         "cloakbrowser_cache_dir": "/opt/cloakbrowser",
         "cloakbrowser_auto_update": False,
     },
@@ -40,23 +40,23 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "fingerprint_seed": "",
         "fingerprint_platform": "Windows",
         "fingerprint_noise": False,
-        "fingerprint_screen_width": 1920,
-        "fingerprint_screen_height": 1080,
+        "fingerprint_screen_width": 1440,
+        "fingerprint_screen_height": 960,
         "storage_quota_mb": "",
     },
     "network_location": {
         "proxy": "",
-        "geoip": False,
+        "geoip": True,
         "timezone": "",
         "locale": "",
-        "webrtc_ip_mode": "disabled",
+        "webrtc_ip_mode": "auto",
         "webrtc_ip": "",
     },
     "advanced": {
         "extra_args": [],
         "filter_default_playwright_args": True,
         "disable_shadow_dom_init_patch": True,
-        "preserve_headed_placeholder_page": True,
+        "preserve_headed_placeholder_page": False,
         "patch_runtime_file_if_needed": True,
     },
     "extensions": {
@@ -179,18 +179,19 @@ def save_config(config: dict[str, Any]) -> dict[str, Any]:
 
 
 def normalize_config(raw: dict[str, Any] | None) -> dict[str, Any]:
-    cfg = _deep_merge(DEFAULT_CONFIG, raw if isinstance(raw, dict) else {})
+    raw_cfg = raw if isinstance(raw, dict) else {}
+    cfg = _deep_merge(DEFAULT_CONFIG, raw_cfg)
     rt = cfg["runtime"]
     rt["enabled"] = _bool(rt.get("enabled"), True)
     rt["headed"] = _bool(rt.get("headed"), True)
     rt["display"] = _display(rt.get("display"), ":99")
     rt["auto_start_xvfb"] = _bool(rt.get("auto_start_xvfb"), True)
     rt["reuse_existing_display"] = _bool(rt.get("reuse_existing_display"), True)
-    rt["display_width"] = _int(rt.get("display_width"), 1920, 320, 8192)
-    rt["display_height"] = _int(rt.get("display_height"), 1080, 200, 8192)
+    rt["display_width"] = _int(rt.get("display_width"), 1440, 320, 8192)
+    rt["display_height"] = _int(rt.get("display_height"), 960, 200, 8192)
     rt["display_depth"] = _int(rt.get("display_depth"), 24, 8, 32)
-    rt["viewport_width"] = _int(rt.get("viewport_width"), 1920, 320, 8192)
-    rt["viewport_height"] = _int(rt.get("viewport_height"), 1080, 200, 8192)
+    rt["viewport_width"] = _int(rt.get("viewport_width"), 1440, 320, 8192)
+    rt["viewport_height"] = _int(rt.get("viewport_height"), 960, 200, 8192)
     rt["cloakbrowser_cache_dir"] = str(rt.get("cloakbrowser_cache_dir") or "/opt/cloakbrowser")
     rt["cloakbrowser_auto_update"] = _bool(rt.get("cloakbrowser_auto_update"), False)
 
@@ -207,20 +208,31 @@ def normalize_config(raw: dict[str, Any] | None) -> dict[str, Any]:
     ident["fingerprint_seed"] = str(ident.get("fingerprint_seed") or "").strip()
     ident["fingerprint_platform"] = str(ident.get("fingerprint_platform") or "Windows").strip()
     ident["fingerprint_noise"] = _bool(ident.get("fingerprint_noise"), False)
-    ident["fingerprint_screen_width"] = _int(ident.get("fingerprint_screen_width"), 1920, 320, 8192)
+    ident["fingerprint_screen_width"] = _int(
+        ident.get("fingerprint_screen_width"), 1440, 320, 8192
+    )
     ident["fingerprint_screen_height"] = _int(
-        ident.get("fingerprint_screen_height"), 1080, 200, 8192
+        ident.get("fingerprint_screen_height"), 960, 200, 8192
     )
     ident["storage_quota_mb"] = _optional_int_string(ident.get("storage_quota_mb"))
 
     net = cfg["network_location"]
     net["proxy"] = str(net.get("proxy") or "").strip()
-    net["geoip"] = _bool(net.get("geoip"), False)
-    net["timezone"] = str(net.get("timezone") or "").strip() or _detect_timezone()
-    net["locale"] = str(net.get("locale") or "").strip() or _detect_locale()
-    net["webrtc_ip_mode"] = str(net.get("webrtc_ip_mode") or "disabled").strip()
+    net["geoip"] = _bool(net.get("geoip"), True)
+    explicit_timezone = _has_nested_key(raw_cfg, "network_location", "timezone")
+    explicit_locale = _has_nested_key(raw_cfg, "network_location", "locale")
+    net["timezone"] = str(net.get("timezone") or "").strip()
+    net["locale"] = str(net.get("locale") or "").strip()
+    if not net["geoip"]:
+        net["timezone"] = net["timezone"] or _detect_timezone()
+        net["locale"] = net["locale"] or _detect_locale()
+    elif not explicit_timezone:
+        net["timezone"] = ""
+    elif not explicit_locale:
+        net["locale"] = ""
+    net["webrtc_ip_mode"] = str(net.get("webrtc_ip_mode") or "auto").strip()
     if net["webrtc_ip_mode"] not in {"auto", "disabled", "explicit"}:
-        net["webrtc_ip_mode"] = "disabled"
+        net["webrtc_ip_mode"] = "auto"
     net["webrtc_ip"] = str(net.get("webrtc_ip") or "").strip()
 
     adv = cfg["advanced"]
@@ -228,7 +240,7 @@ def normalize_config(raw: dict[str, Any] | None) -> dict[str, Any]:
     adv["filter_default_playwright_args"] = _bool(adv.get("filter_default_playwright_args"), True)
     adv["disable_shadow_dom_init_patch"] = _bool(adv.get("disable_shadow_dom_init_patch"), True)
     adv["preserve_headed_placeholder_page"] = _bool(
-        adv.get("preserve_headed_placeholder_page"), True
+        adv.get("preserve_headed_placeholder_page"), False
     )
     adv["patch_runtime_file_if_needed"] = _bool(adv.get("patch_runtime_file_if_needed"), True)
 
@@ -326,6 +338,11 @@ def _string_list(value: Any) -> list[str]:
             seen.add(text)
             out.append(text)
     return out
+
+
+def _has_nested_key(value: dict[str, Any], section: str, key: str) -> bool:
+    section_value = value.get(section)
+    return isinstance(section_value, dict) and key in section_value
 
 
 def _detect_timezone() -> str:

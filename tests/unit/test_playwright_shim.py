@@ -89,6 +89,63 @@ def test_build_launch_overrides_drops_explicit_no_sandbox(monkeypatch):
     assert "--disable-dev-shm-usage" not in launch_kwargs["ignore_default_args"]
 
 
+def test_build_launch_overrides_uses_old_working_profile_defaults(monkeypatch):
+    from helpers import playwright_shim
+    from helpers.config import normalize_config
+
+    geoip_calls = []
+    package = ModuleType("cloakbrowser")
+    package.ensure_binary = lambda: "/opt/cloakbrowser/chrome"
+    browser_module = ModuleType("cloakbrowser.browser")
+
+    def maybe_resolve_geoip(geoip, proxy, timezone, locale):
+        geoip_calls.append(
+            {
+                "geoip": geoip,
+                "proxy": proxy,
+                "timezone": timezone,
+                "locale": locale,
+            }
+        )
+        return "America/New_York", "en-US", "203.0.113.10"
+
+    def build_args(_stealth, args, **kwargs):
+        out = list(args)
+        if kwargs.get("timezone"):
+            out.append(f"--fingerprint-timezone={kwargs['timezone']}")
+        if kwargs.get("locale"):
+            out.append(f"--fingerprint-locale={kwargs['locale']}")
+        return out
+
+    browser_module.build_args = build_args
+    browser_module.maybe_resolve_geoip = maybe_resolve_geoip
+    config_module = ModuleType("cloakbrowser.config")
+    config_module.IGNORE_DEFAULT_ARGS = []
+    monkeypatch.setitem(sys.modules, "cloakbrowser", package)
+    monkeypatch.setitem(sys.modules, "cloakbrowser.browser", browser_module)
+    monkeypatch.setitem(sys.modules, "cloakbrowser.config", config_module)
+    monkeypatch.setattr(playwright_shim, "ensure_masquerade", lambda _binary: None)
+    monkeypatch.setattr(playwright_shim, "apply_environment", lambda _cfg: None)
+    monkeypatch.setattr(playwright_shim, "get_config", lambda: normalize_config({}))
+    monkeypatch.setattr(playwright_shim, "active_extension_paths", lambda _cfg: [])
+
+    launch_kwargs, _info = playwright_shim.build_launch_overrides({}, persistent=True)
+
+    assert geoip_calls == [
+        {"geoip": True, "proxy": None, "timezone": None, "locale": None}
+    ]
+    assert launch_kwargs["headless"] is False
+    assert launch_kwargs["viewport"] == {"width": 1440, "height": 960}
+    assert launch_kwargs["screen"] == {"width": 1440, "height": 960}
+    assert launch_kwargs["humanize"] is True
+    assert launch_kwargs["human_preset"] == "default"
+    assert "--fingerprint-screen-width=1440" in launch_kwargs["args"]
+    assert "--fingerprint-screen-height=960" in launch_kwargs["args"]
+    assert "--fingerprint-timezone=America/New_York" in launch_kwargs["args"]
+    assert "--fingerprint-locale=en-US" in launch_kwargs["args"]
+    assert "--fingerprint-webrtc-ip=203.0.113.10" in launch_kwargs["args"]
+
+
 def test_agent_zero_managed_browser_path_is_patched():
     assert should_patch_launch(
         {
@@ -175,10 +232,10 @@ def _minimal_config():
         "runtime": {
             "enabled": True,
             "headed": True,
-            "viewport_width": 1920,
-            "viewport_height": 1080,
-            "display_width": 1920,
-            "display_height": 1080,
+            "viewport_width": 1440,
+            "viewport_height": 960,
+            "display_width": 1440,
+            "display_height": 960,
         },
         "humanization": {"humanize": False, "human_preset": "default"},
         "identity": {
@@ -186,16 +243,16 @@ def _minimal_config():
             "fingerprint_seed": "12345",
             "fingerprint_platform": "Windows",
             "fingerprint_noise": False,
-            "fingerprint_screen_width": 1920,
-            "fingerprint_screen_height": 1080,
+            "fingerprint_screen_width": 1440,
+            "fingerprint_screen_height": 960,
             "storage_quota_mb": "",
         },
         "network_location": {
             "proxy": "",
             "timezone": "",
             "locale": "",
-            "geoip": False,
-            "webrtc_ip_mode": "disabled",
+            "geoip": True,
+            "webrtc_ip_mode": "auto",
             "webrtc_ip": "",
         },
         "advanced": {"extra_args": []},

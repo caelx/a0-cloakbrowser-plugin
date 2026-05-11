@@ -4,7 +4,10 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import sys
 import time
+from contextlib import contextmanager
+from pathlib import Path
 from typing import Any
 
 
@@ -14,6 +17,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--noninteractive", action="store_true")
     parser.add_argument("--skip-system-deps", action="store_true")
     parser.add_argument("--remove-extensions", action="store_true")
+    parser.add_argument("--force", action="store_true", help="Run setup even if this plugin is disabled")
     parser.add_argument("--json", action="store_true", help="Print machine-readable JSON output")
     args = parser.parse_args(argv)
 
@@ -25,6 +29,20 @@ def main(argv: list[str] | None = None) -> int:
         status = collect_status()
         _print_result(status if args.json else format_status(status))
         return 0
+    if args.command == "run" and not args.force and not _is_plugin_enabled():
+        from plugin_imports import plugin_import
+
+        uninstall = plugin_import("helpers.uninstall").uninstall
+
+        result = uninstall(remove_extensions=False)
+        payload = {
+            "ok": bool(result.get("ok")),
+            "command": args.command,
+            "disabled": True,
+            "uninstall": result,
+        }
+        _print_result(json.dumps(payload, indent=2, sort_keys=True) if args.json else format_uninstall(result))
+        return 0 if result.get("ok") else 1
     if args.command in {"run", "setup", "repair"}:
         from plugin_imports import plugin_import
 
@@ -73,6 +91,72 @@ def setup_readiness(status: dict[str, Any]) -> dict[str, Any]:
         checks["display_usable"] = bool(display.get("usable_current") or display.get("usable_configured"))
     failed = [name for name, ok in checks.items() if not ok]
     return {"ok": not failed, "checks": checks, "failed": failed}
+
+
+def _is_plugin_enabled() -> bool:
+    root = Path(__file__).resolve().parent
+    try:
+        from plugin_imports import ensure_agent_zero_path
+
+        ensure_agent_zero_path(root)
+        with _without_local_helpers(root):
+            from helpers import plugins
+
+            enabled = plugins.get_enabled_plugins(None)
+    except Exception:
+        return True
+
+    if enabled is None:
+        return True
+    for item in enabled:
+        if item == "cloakbrowser":
+            return True
+        if isinstance(item, dict):
+            name = item.get("name") or item.get("id") or item.get("plugin_name")
+            if name == "cloakbrowser":
+                return True
+        else:
+            name = getattr(item, "name", None) or getattr(item, "id", None)
+            if name == "cloakbrowser":
+                return True
+
+    return False
+
+
+@contextmanager
+def _without_local_helpers(root: Path):
+    removed_entries: list[tuple[int, str]] = []
+    removed_modules: dict[str, Any] = {}
+    for name, module in list(sys.modules.items()):
+        if name != "helpers" and not name.startswith("helpers."):
+            continue
+        module_file = Path(getattr(module, "__file__", "") or "")
+        if not module_file:
+            continue
+        try:
+            if not module_file.resolve().is_relative_to(root):
+                continue
+        except Exception:
+            continue
+        removed_modules[name] = module
+        sys.modules.pop(name, None)
+
+    for index, entry in reversed(list(enumerate(sys.path))):
+        try:
+            matches_root = Path(entry or ".").resolve() == root
+        except Exception:
+            matches_root = False
+        if entry == str(root) or matches_root:
+            removed_entries.append((index, entry))
+            sys.path.pop(index)
+
+    try:
+        yield
+    finally:
+        for index, entry in sorted(removed_entries):
+            sys.path.insert(min(index, len(sys.path)), entry)
+        for name, module in removed_modules.items():
+            sys.modules.setdefault(name, module)
 
 
 def format_setup(payload: dict[str, Any]) -> str:

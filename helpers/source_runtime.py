@@ -8,7 +8,6 @@ from .playwright_shim import (
     _cloak_launch_persistent_async,
     build_launch_overrides,
 )
-from .runtime_patch import _close_all_preserving_placeholder
 
 
 async def launch_persistent_context(browser_type: Any, launch_kwargs: dict[str, Any]) -> Any:
@@ -24,14 +23,5 @@ async def launch_persistent_context(browser_type: Any, launch_kwargs: dict[str, 
         _IN_CLOAK_LAUNCH.reset(token)
 
 
-def preserve_headed_placeholder() -> bool:
-    cfg = get_config()
-    return bool(cfg["runtime"]["headed"] and cfg["advanced"]["preserve_headed_placeholder_page"])
-
-
 def disable_shadow_dom_init() -> bool:
     return bool(get_config()["advanced"]["disable_shadow_dom_init_patch"])
-
-
-async def close_all_preserving_placeholder(core: Any) -> dict[str, Any]:
-    return await _close_all_preserving_placeholder(core)

@@ -120,7 +120,7 @@ async def main() -> int:
         {"action": "wheel", "x": 200, "y": 200, "delta_y": 100},
         {"action": "keyboard", "key": "Escape"},
         {"action": "clipboard", "event_type": "paste", "text": "clip"},
-        {"action": "set_viewport", "width": 1920, "height": 1080},
+        {"action": "set_viewport", "width": 1440, "height": 960},
         {"action": "select_option", "ref": refs["s"], "value": "b"},
         {"action": "set_checked", "ref": refs["c"], "checked": True},
         {"action": "upload_file", "ref": refs["u"], "path": str(upload)},
@@ -157,17 +157,10 @@ async def main() -> int:
             value = json.loads(value_response.message)["result"]
             assert value in {"xyz", "abcxyz"}
     close_all_result = json.loads(last_response.message)
-    assert close_all_result["browsers"] == [
-        {
-            "id": close_all_result["last_interacted_browser_id"],
-            "context_id": "cloakbrowser-ci",
-            "currentUrl": "about:blank",
-            "title": "",
-            "canGoBack": False,
-            "canGoForward": False,
-            "loading": False,
-        }
-    ], close_all_result
+    assert close_all_result == {
+        "browsers": [],
+        "last_interacted_browser_id": None,
+    }, close_all_result
     Path("artifacts").mkdir(exist_ok=True)
     Path("artifacts/browser-tool-results.json").write_text(
         json.dumps(results, indent=2) + "\n", encoding="utf-8"

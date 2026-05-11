@@ -52,6 +52,9 @@ scripts. `repair` reruns setup over an existing install. `status` writes
 diagnostics for dependencies, display, extensions, runtime patch state, and
 effective config. `uninstall` removes plugin-managed setup files and leaves
 profiles and browser data intact.
+If CloakBrowser is disabled in Agent Zero, `python execute.py` runs uninstall
+instead of setup; image builds and repair automation can pass `--force` to set
+up the plugin anyway.
 
 `hooks.py` is intentionally lightweight and does not install packages, patch
 Agent Zero, or remove files.
@@ -82,16 +85,13 @@ and is restored on uninstall only when the current file still matches the
 plugin-patched hash. Process-local runtime and Playwright monkey patches remain
 as fallback support for smoke tests and development runs.
 
-The runtime patch intentionally changes two `_browser` behaviors:
+The runtime patch intentionally changes one `_browser` behavior:
 
 - The open-shadow-DOM init script is replaced with a no-op when
   `advanced.disable_shadow_dom_init_patch` is enabled. This matches the effective
-  Ghostship CloakBrowser behavior.
-- In headed mode, the sole initial `about:blank` page is preserved so the visible
-  CloakBrowser window is not closed during `_browser` startup.
-- In headed mode, `close_all` closes user pages but leaves one registered
-  `about:blank` page alive. Headless mode still delegates to upstream `_browser`
-  and full runtime shutdown still closes the browser process.
+  Ghostship CloakBrowser behavior without editing Agent Zero source files.
+Headed tab lifecycle, `about:blank`, annotation, input forwarding, and
+`close_all` behavior remain owned by upstream `_browser`.
 
 Launch argument filtering is always on. The plugin drops conflicting
 `--disable-gpu`, duplicate explicit `--no-sandbox`, and bare
@@ -107,15 +107,16 @@ surface but changes the launch backend, default headed display behavior,
 fingerprint/screen defaults, humanization, and extension provisioning. Browser
 profiles remain under Agent Zero's `tmp/browser/sessions`.
 
-Default network and identity settings avoid external geoip resolution:
-`geoip=false`, blank timezone/locale values are filled from the local process
-environment when possible, `webrtc_ip_mode=disabled`, and
-`fingerprint_platform=Windows`. The cookie annoyance extension update is enabled
-by default during setup.
+Default network and identity settings follow the old working Ghostship profile:
+`geoip=true`, timezone/locale are resolved by CloakBrowser GeoIP unless
+explicitly configured, `webrtc_ip_mode=auto`, and `fingerprint_platform=Windows`.
+The cookie annoyance extension update is enabled by default during setup. If
+GeoIP is explicitly disabled, blank timezone/locale values fall back to the
+local process environment when possible.
 
 ## Display
 
-Default display, viewport, screen, and fingerprint dimensions are `1920x1080`.
+Default display, viewport, screen, and fingerprint dimensions are `1440x960`.
 If `$DISPLAY` or the configured display is already usable, the plugin reuses it.
 If the preferred display, normally `:99`, is occupied but unusable, setup tries
 alternate displays such as `:98` and `:100` and records the selected display in
@@ -124,7 +125,7 @@ When no usable display exists and supervisor is available, setup writes only:
 
 ```ini
 [program:cloakbrowser_xvfb]
-command=/usr/bin/Xvfb :99 -screen 0 1920x1080x24 -nolisten tcp
+command=/usr/bin/Xvfb :99 -screen 0 1440x960x24 -nolisten tcp
 ```
 
 If supervisor is unavailable, setup falls back to a direct Xvfb background
@@ -200,6 +201,11 @@ detector checks are artifact-producing by default, and CI enables
 the run. reCAPTCHA v3, 2captcha v3, and Turnstile are included in that strict
 live gate. Audio FP is skipped while its endpoint serves an expired TLS
 certificate.
+Run `ci/run_ziperto_probe.py` inside an Agent Zero image to capture
+`artifacts/ziperto-probe.json` and `artifacts/ziperto-probe.png` with
+Cloudflare markers, launch args, fingerprint dimensions, timezone/locale, and
+active extension paths. Set `CLOAKBROWSER_ZIPERTO_STRICT=1` to make a detected
+Cloudflare interstitial fail the probe.
 
 Integration output is captured to `artifacts/agent-zero-integration.log` and
 scanned for browser crash signatures including context-close warnings, asyncio
