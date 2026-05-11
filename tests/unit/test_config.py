@@ -13,19 +13,51 @@ def test_normalize_config_defaults_and_invalid_values(monkeypatch):
         }
     )
 
-    assert cfg["runtime"]["viewport_width"] == 1920
+    assert cfg["runtime"]["display_width"] == 1440
+    assert cfg["runtime"]["display_height"] == 960
+    assert cfg["runtime"]["viewport_width"] == 1440
+    assert cfg["runtime"]["viewport_height"] == 960
+    assert cfg["identity"]["fingerprint_screen_width"] == 1440
+    assert cfg["identity"]["fingerprint_screen_height"] == 960
     assert cfg["runtime"]["display"] == ":98"
     assert cfg["humanization"]["human_preset"] == "default"
-    assert cfg["network_location"]["geoip"] is False
-    assert cfg["network_location"]["timezone"] == "America/New_York"
-    assert cfg["network_location"]["locale"] == "en-US"
-    assert cfg["network_location"]["webrtc_ip_mode"] == "disabled"
+    assert cfg["network_location"]["geoip"] is True
+    assert cfg["network_location"]["timezone"] == ""
+    assert cfg["network_location"]["locale"] == ""
+    assert cfg["network_location"]["webrtc_ip_mode"] == "auto"
     assert cfg["identity"]["fingerprint_platform"] == "Windows"
     assert cfg["extensions"]["update_i_still_dont_care_about_cookies_on_setup"] is True
     assert cfg["bypass_paywalls_clean"]["opt_in_setcookie"] is True
     assert cfg["bypass_paywalls_clean"]["opt_in_custom_sites"] is True
     assert cfg["bypass_paywalls_clean"]["opt_in_update"] is True
+    assert "preserve_headed_placeholder_page" not in cfg["advanced"]
     assert cfg["advanced"]["extra_args"] == ["--foo", "--bar"]
+
+
+def test_explicit_timezone_locale_override_geoip_resolution():
+    cfg = normalize_config(
+        {
+            "network_location": {
+                "timezone": "America/Chicago",
+                "locale": "en-US",
+            },
+        }
+    )
+
+    assert cfg["network_location"]["geoip"] is True
+    assert cfg["network_location"]["timezone"] == "America/Chicago"
+    assert cfg["network_location"]["locale"] == "en-US"
+
+
+def test_geoip_disabled_uses_local_timezone_locale(monkeypatch):
+    monkeypatch.setenv("TZ", "America/Denver")
+    monkeypatch.setenv("LANG", "en_US.UTF-8")
+
+    cfg = normalize_config({"network_location": {"geoip": False}})
+
+    assert cfg["network_location"]["geoip"] is False
+    assert cfg["network_location"]["timezone"] == "America/Denver"
+    assert cfg["network_location"]["locale"] == "en-US"
 
 
 def test_redacted_config_hides_proxy_credentials():

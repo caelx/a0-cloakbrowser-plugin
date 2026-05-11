@@ -4,11 +4,11 @@ runtime:
   display: ":99"
   auto_start_xvfb: true
   reuse_existing_display: true
-  display_width: 1920
-  display_height: 1080
+  display_width: 1440
+  display_height: 960
   display_depth: 24
-  viewport_width: 1920
-  viewport_height: 1080
+  viewport_width: 1440
+  viewport_height: 960
   cloakbrowser_cache_dir: "/opt/cloakbrowser"
   cloakbrowser_auto_update: false
 
@@ -21,23 +21,22 @@ identity:
   fingerprint_seed: ""
   fingerprint_platform: "Windows"
   fingerprint_noise: false
-  fingerprint_screen_width: 1920
-  fingerprint_screen_height: 1080
+  fingerprint_screen_width: 1440
+  fingerprint_screen_height: 960
   storage_quota_mb: ""
 
 network_location:
   proxy: ""
-  geoip: false
+  geoip: true
   timezone: ""
   locale: ""
-  webrtc_ip_mode: "disabled"
+  webrtc_ip_mode: "auto"
   webrtc_ip: ""
 
 advanced:
   extra_args: []
   filter_default_playwright_args: true
   disable_shadow_dom_init_patch: true
-  preserve_headed_placeholder_page: true
   patch_runtime_file_if_needed: true
 
 extensions:

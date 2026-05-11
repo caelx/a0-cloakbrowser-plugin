@@ -6,8 +6,16 @@ from typing import Any
 
 from .patcher import backup_file, sha256_file
 
-PATCH_VERSION = "1"
-PATCH_MARKER = "CLOAKBROWSER_SOURCE_PATCH_V1"
+PATCH_VERSION = "7"
+PATCH_MARKER = "CLOAKBROWSER_SOURCE_PATCH_V7"
+OLD_PATCH_MARKERS = (
+    "CLOAKBROWSER_SOURCE_PATCH_V1",
+    "CLOAKBROWSER_SOURCE_PATCH_V2",
+    "CLOAKBROWSER_SOURCE_PATCH_V3",
+    "CLOAKBROWSER_SOURCE_PATCH_V4",
+    "CLOAKBROWSER_SOURCE_PATCH_V5",
+    "CLOAKBROWSER_SOURCE_PATCH_V6",
+)
 
 SOURCE_RUNTIME_HELPER = f"""
 
@@ -60,7 +68,7 @@ SHADOW_PATCHED = """        if not (_cloakbrowser_runtime and _cloakbrowser_runt
             await self.context.add_init_script(self._shadow_dom_script())
 """
 
-PLACEHOLDER_ORIGINAL = """        for page in list(self.context.pages):
+START_PAGES_ORIGINAL = """        for page in list(self.context.pages):
             if page.url == "about:blank":
                 try:
                     await page.close()
@@ -70,21 +78,167 @@ PLACEHOLDER_ORIGINAL = """        for page in list(self.context.pages):
             await self._register_page(page)
 """
 
-PLACEHOLDER_PATCHED = """        _cloakbrowser_preserve_placeholder = bool(
-            _cloakbrowser_runtime
-            and _cloakbrowser_runtime.preserve_headed_placeholder()
-        )
-        for page in list(self.context.pages):
+START_PAGES_PATCHED = """        for page in list(self.context.pages):
+            if page.url == "about:blank" and len(self.context.pages) == 1:
+                continue
             if page.url == "about:blank":
-                if _cloakbrowser_preserve_placeholder and not self.pages:
-                    await self._register_page(page)
-                else:
-                    try:
-                        await page.close()
-                    except Exception:
-                        pass
+                try:
+                    await page.close()
+                except Exception:
+                    pass
                 continue
             await self._register_page(page)
+"""
+
+OPEN_ORIGINAL = """    async def open(self, url: str = "") -> dict[str, Any]:
+        await self.ensure_started()
+        page = await self.context.new_page()
+        browser_page = await self._register_page(page)
+"""
+
+OPEN_PATCHED = """    async def open(self, url: str = "") -> dict[str, Any]:
+        await self.ensure_started()
+        page = None
+        if not self.pages:
+            for candidate in list(getattr(self.context, "pages", [])):
+                if not getattr(candidate, "is_closed", lambda: False)():
+                    page = candidate
+                    break
+        if page is None:
+            try:
+                page = await self.context.new_page()
+            except Exception:
+                if self.pages:
+                    raise
+                lock = getattr(self, "_cloakbrowser_open_restart_lock", None)
+                if lock is None:
+                    lock = asyncio.Lock()
+                    self._cloakbrowser_open_restart_lock = lock
+                async with lock:
+                    await self.ensure_started()
+                    if not self.pages:
+                        for candidate in list(getattr(self.context, "pages", [])):
+                            if not getattr(candidate, "is_closed", lambda: False)():
+                                page = candidate
+                                break
+                    if page is None:
+                        try:
+                            page = await self.context.new_page()
+                        except Exception:
+                            if self.pages:
+                                raise
+                            await self._discard_stale_context("Browser context could not open a new tab; restarting.")
+                            await self.ensure_started()
+                            for candidate in list(getattr(self.context, "pages", [])):
+                                if not getattr(candidate, "is_closed", lambda: False)():
+                                    page = candidate
+                                    break
+                            if page is None:
+                                page = await self.context.new_page()
+        browser_page = await self._register_page(page)
+"""
+
+START_PAGES_PATCHED_V1 = """        for page in list(self.context.pages):
+            if page.url == "about:blank":
+                if len(self.context.pages) == 1:
+                    continue
+                try:
+                    await page.close()
+                except Exception:
+                    pass
+                continue
+            await self._register_page(page)
+"""
+
+OPEN_PATCHED_V1 = """    async def open(self, url: str = "") -> dict[str, Any]:
+        await self.ensure_started()
+        page = None
+        if not self.pages:
+            for candidate in list(self.context.pages):
+                if candidate.url == "about:blank":
+                    page = candidate
+                    break
+        if page is None:
+            try:
+                page = await self.context.new_page()
+            except Exception:
+                if self.pages:
+                    raise
+                await self._discard_stale_context("Browser context could not open a new tab; restarting.")
+                await self.ensure_started()
+                for candidate in list(self.context.pages):
+                    if candidate.url == "about:blank":
+                        page = candidate
+                        break
+                if page is None:
+                    page = await self.context.new_page()
+        browser_page = await self._register_page(page)
+"""
+
+OPEN_PATCHED_V2 = """    async def open(self, url: str = "") -> dict[str, Any]:
+        await self.ensure_started()
+        try:
+            page = await self.context.new_page()
+        except Exception:
+            if self.pages:
+                raise
+            lock = getattr(self, "_cloakbrowser_open_restart_lock", None)
+            if lock is None:
+                lock = asyncio.Lock()
+                self._cloakbrowser_open_restart_lock = lock
+            async with lock:
+                await self.ensure_started()
+                try:
+                    page = await self.context.new_page()
+                except Exception:
+                    if self.pages:
+                        raise
+                    await self._discard_stale_context("Browser context could not open a new tab; restarting.")
+                    await self.ensure_started()
+                    page = await self.context.new_page()
+        browser_page = await self._register_page(page)
+"""
+
+CLOSE_BROWSER_ORIGINAL = """    async def close_browser(self, browser_id: int | str | None = None) -> dict[str, Any]:
+        await self.ensure_started()
+        resolved_id = self._resolve_browser_id(browser_id)
+        await self._stop_screencasts_for_browser(resolved_id)
+        page = self._page(resolved_id)
+        await page.close()
+        self.pages.pop(resolved_id, None)
+        if self.last_interacted_browser_id == resolved_id:
+            self.last_interacted_browser_id = next(iter(sorted(self.pages)), None)
+        return await self.list()
+"""
+
+CLOSE_BROWSER_PATCHED = """    async def close_browser(self, browser_id: int | str | None = None) -> dict[str, Any]:
+        await self.ensure_started()
+        resolved_id = self._resolve_browser_id(browser_id)
+        await self._stop_screencasts_for_browser(resolved_id)
+        page = self._page(resolved_id)
+        expecting_context_close = len(self.pages) <= 1
+        context_closed_future = None
+        if expecting_context_close:
+            context_closed_future = asyncio.get_running_loop().create_future()
+            self._cloakbrowser_expected_context_close = True
+            self._cloakbrowser_expected_context_close_future = context_closed_future
+        try:
+            await page.close()
+        finally:
+            if expecting_context_close and context_closed_future:
+                try:
+                    await asyncio.wait_for(asyncio.shield(context_closed_future), timeout=1)
+                except asyncio.TimeoutError:
+                    pass
+                finally:
+                    self._cloakbrowser_expected_context_close = False
+                    self._cloakbrowser_expected_context_close_future = None
+        self.pages.pop(resolved_id, None)
+        if self.last_interacted_browser_id == resolved_id:
+            self.last_interacted_browser_id = next(iter(sorted(self.pages)), None)
+        if self.context is None and self.playwright:
+            await self._stop_playwright("Playwright stop after CloakBrowser context loss failed")
+        return await self.list()
 """
 
 CLOSE_ALL_ORIGINAL = """    async def close_all_browsers(self) -> dict[str, Any]:
@@ -101,21 +255,82 @@ CLOSE_ALL_ORIGINAL = """    async def close_all_browsers(self) -> dict[str, Any]
 """
 
 CLOSE_ALL_PATCHED = """    async def close_all_browsers(self) -> dict[str, Any]:
-        _cloakbrowser_runtime = _cloakbrowser_source_runtime()
-        if _cloakbrowser_runtime and _cloakbrowser_runtime.preserve_headed_placeholder():
-            return await _cloakbrowser_runtime.close_all_preserving_placeholder(self)
         await self.ensure_started()
         await self._stop_all_screencasts()
-        for browser_id in list(self.pages):
-            try:
-                await self.pages[browser_id].page.close()
-            except Exception:
-                pass
+        expecting_context_close = bool(self.pages)
+        context_closed_future = None
+        if expecting_context_close:
+            context_closed_future = asyncio.get_running_loop().create_future()
+            self._cloakbrowser_expected_context_close = True
+            self._cloakbrowser_expected_context_close_future = context_closed_future
+        try:
+            for browser_id in list(self.pages):
+                try:
+                    await self.pages[browser_id].page.close()
+                except Exception:
+                    pass
+        finally:
+            if expecting_context_close and context_closed_future:
+                try:
+                    await asyncio.wait_for(asyncio.shield(context_closed_future), timeout=1)
+                except asyncio.TimeoutError:
+                    pass
+                finally:
+                    self._cloakbrowser_expected_context_close = False
+                    self._cloakbrowser_expected_context_close_future = None
         self.pages.clear()
         self.last_interacted_browser_id = None
+        if self.context is None and self.playwright:
+            await self._stop_playwright("Playwright stop after CloakBrowser context loss failed")
         return {"browsers": [], "last_interacted_browser_id": None}
 """
 
+CONTEXT_CLOSED_ORIGINAL = """    def _on_context_closed(self) -> None:
+        if self._closing or self.context is None:
+            return
+        PrintStyle.warning("Browser context closed unexpectedly; will restart on next use.")
+        self._discard_context_state()
+"""
+
+CONTEXT_CLOSED_PATCHED = """    def _on_context_closed(self) -> None:
+        if self._closing or self.context is None:
+            return
+        if getattr(self, "_cloakbrowser_expected_context_close", False):
+            future = getattr(self, "_cloakbrowser_expected_context_close_future", None)
+            self._discard_context_state()
+            if future and not future.done():
+                future.set_result(None)
+            return
+        PrintStyle.warning("Browser context closed unexpectedly; will restart on next use.")
+        self._discard_context_state()
+"""
+
+STOP_PLAYWRIGHT_ORIGINAL = """    async def _stop_playwright(self, warning: str) -> None:
+        if not self.playwright:
+            return
+        try:
+            await self.playwright.stop()
+        except Exception as exc:
+            PrintStyle.warning(f"{warning}: {exc}")
+        finally:
+            self.playwright = None
+"""
+
+STOP_PLAYWRIGHT_PATCHED = """    async def _stop_playwright(self, warning: str) -> None:
+        if not self.playwright:
+            return
+        playwright = self.playwright
+        self.playwright = None
+        try:
+            await playwright.stop()
+        except Exception as exc:
+            PrintStyle.warning(f"{warning}: {exc}")
+        finally:
+            import gc
+
+            gc.collect()
+            await asyncio.sleep(0.25)
+"""
 
 def patch_runtime_source(manifest: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
     if not config["advanced"]["patch_runtime_file_if_needed"]:
@@ -139,9 +354,12 @@ def patch_runtime_source(manifest: dict[str, Any], config: dict[str, Any]) -> di
         manifest["runtime_source_patch"] = result
         _record_runtime_patch(manifest, result)
         return result
+    is_old_patch = any(marker in original_text for marker in OLD_PATCH_MARKERS)
 
     original_hash = sha256_file(target)
-    patched_text = patch_runtime_source_text(original_text)
+    patched_text = (
+        upgrade_runtime_source_text(original_text) if is_old_patch else patch_runtime_source_text(original_text)
+    )
     backup = backup_file(target, target.parent / ".cloakbrowser-backups")
     target.write_text(patched_text, encoding="utf-8")
     patched_hash = sha256_file(target)
@@ -153,6 +371,7 @@ def patch_runtime_source(manifest: dict[str, Any], config: dict[str, Any]) -> di
         "original_hash": original_hash,
         "patched_hash": patched_hash,
         "patch_version": PATCH_VERSION,
+        "upgraded": is_old_patch,
     }
     manifest["runtime_source_patch"] = result
     _record_runtime_patch(manifest, result)
@@ -200,8 +419,52 @@ def patch_runtime_source_text(text: str) -> str:
         patched = _replace_once(patched, anchor, anchor + SOURCE_RUNTIME_HELPER)
     patched = _replace_once(patched, LAUNCH_ORIGINAL, LAUNCH_PATCHED)
     patched = _replace_once(patched, SHADOW_ORIGINAL, SHADOW_PATCHED)
-    patched = _replace_once(patched, PLACEHOLDER_ORIGINAL, PLACEHOLDER_PATCHED)
+    patched = _replace_once(patched, START_PAGES_ORIGINAL, START_PAGES_PATCHED)
+    patched = _replace_once(patched, OPEN_ORIGINAL, OPEN_PATCHED)
+    patched = _replace_once(patched, CLOSE_BROWSER_ORIGINAL, CLOSE_BROWSER_PATCHED)
     patched = _replace_once(patched, CLOSE_ALL_ORIGINAL, CLOSE_ALL_PATCHED)
+    patched = _replace_once(patched, CONTEXT_CLOSED_ORIGINAL, CONTEXT_CLOSED_PATCHED)
+    patched = _replace_once(patched, STOP_PLAYWRIGHT_ORIGINAL, STOP_PLAYWRIGHT_PATCHED)
+    return patched
+
+
+def upgrade_runtime_source_text(text: str) -> str:
+    patched = text
+    for old_marker in OLD_PATCH_MARKERS:
+        patched = patched.replace(old_marker, PATCH_MARKER)
+    if START_PAGES_PATCHED in patched:
+        pass
+    elif START_PAGES_PATCHED_V1 in patched:
+        patched = _replace_once(patched, START_PAGES_PATCHED_V1, START_PAGES_PATCHED)
+    else:
+        patched = _replace_once(patched, START_PAGES_ORIGINAL, START_PAGES_PATCHED)
+    patched = _replace_first_matching_once(
+        patched,
+        (OPEN_PATCHED, OPEN_PATCHED_V2, OPEN_PATCHED_V1, OPEN_ORIGINAL),
+        OPEN_PATCHED,
+    )
+    patched = _replace_first_matching_once(
+        patched,
+        (CLOSE_BROWSER_PATCHED, CLOSE_BROWSER_ORIGINAL),
+        CLOSE_BROWSER_PATCHED,
+    )
+    patched = _replace_first_matching_once(
+        patched,
+        (CLOSE_ALL_PATCHED, CLOSE_ALL_ORIGINAL),
+        CLOSE_ALL_PATCHED,
+    )
+    patched = _replace_first_matching_once(
+        patched,
+        (CONTEXT_CLOSED_PATCHED, CONTEXT_CLOSED_ORIGINAL),
+        CONTEXT_CLOSED_PATCHED,
+    )
+    patched = _replace_first_matching_once(
+        patched,
+        (STOP_PLAYWRIGHT_PATCHED, STOP_PLAYWRIGHT_ORIGINAL),
+        STOP_PLAYWRIGHT_PATCHED,
+    )
+    if PATCH_MARKER not in patched:
+        raise ValueError("Expected upgraded runtime source to contain current patch marker")
     return patched
 
 
@@ -210,6 +473,13 @@ def _replace_once(text: str, old: str, new: str) -> str:
     if count != 1:
         raise ValueError(f"Expected one runtime source patch target, found {count}")
     return text.replace(old, new, 1)
+
+
+def _replace_first_matching_once(text: str, candidates: tuple[str, ...], new: str) -> str:
+    for old in candidates:
+        if old in text:
+            return _replace_once(text, old, new)
+    raise ValueError("Expected one runtime source patch target, found 0")
 
 
 def _record_runtime_patch(manifest: dict[str, Any], result: dict[str, Any]) -> None:

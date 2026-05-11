@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import random
+import json
+import urllib.error
+import urllib.request
 from contextlib import contextmanager
 from contextvars import ContextVar
 from pathlib import Path
@@ -15,6 +18,7 @@ DROP_PREFIXES = ("--disable-dev-shm-usage=", "--disable-gpu=", "--disable-extens
 IGNORE_DEFAULT_ADDITIONS = [
     "--disable-gpu",
     "--disable-extensions",
+    "--disable-dev-shm-usage",
 ]
 
 _STATE: dict[str, Any] = {
@@ -23,6 +27,7 @@ _STATE: dict[str, Any] = {
     "sync_originals": {},
     "last_launch": {},
 }
+_PUBLIC_GEOIP_CACHE: dict[str, str | None] | None = None
 _IN_CLOAK_LAUNCH: ContextVar[bool] = ContextVar("cloakbrowser_in_cloak_launch", default=False)
 
 
@@ -126,7 +131,13 @@ def build_launch_overrides(kwargs: dict[str, Any], *, persistent: bool) -> tuple
     timezone = cfg["network_location"]["timezone"] or None
     locale = cfg["network_location"]["locale"] or None
     geoip = bool(cfg["network_location"]["geoip"])
-    timezone, locale, exit_ip = maybe_resolve_geoip(geoip, proxy, timezone, locale)
+    timezone, locale, exit_ip = resolve_location(
+        maybe_resolve_geoip,
+        geoip=geoip,
+        proxy=proxy,
+        timezone=timezone,
+        locale=locale,
+    )
     if cfg["network_location"]["webrtc_ip_mode"] == "auto" and exit_ip:
         filtered_args.append(f"--fingerprint-webrtc-ip={exit_ip}")
     elif cfg["network_location"]["webrtc_ip_mode"] == "explicit" and cfg["network_location"]["webrtc_ip"]:
@@ -209,6 +220,90 @@ def redact_args(args: list[str]) -> list[str]:
         else:
             redacted.append(arg)
     return redacted
+
+
+def resolve_location(
+    maybe_resolve_geoip,
+    *,
+    geoip: bool,
+    proxy: str | None,
+    timezone: str | None,
+    locale: str | None,
+) -> tuple[str | None, str | None, str | None]:
+    if not geoip:
+        return timezone, locale, None
+    if proxy:
+        return maybe_resolve_geoip(geoip, proxy, timezone, locale)
+    if timezone and locale:
+        return timezone, locale, None
+    public_geo = _resolve_public_geoip()
+    if timezone is None:
+        timezone = public_geo.get("timezone")
+    if locale is None:
+        locale = public_geo.get("locale")
+    return timezone, locale, public_geo.get("ip")
+
+
+def _resolve_public_geoip() -> dict[str, str | None]:
+    global _PUBLIC_GEOIP_CACHE
+    if _PUBLIC_GEOIP_CACHE is not None:
+        return dict(_PUBLIC_GEOIP_CACHE)
+
+    for url, parser in (
+        ("https://ipapi.co/json/", _parse_ipapi_geo),
+        ("https://ipwho.is/", _parse_ipwhois_geo),
+    ):
+        try:
+            with urllib.request.urlopen(url, timeout=3) as response:
+                payload = json.loads(response.read().decode("utf-8", "replace"))
+            parsed = parser(payload)
+            if parsed.get("timezone") or parsed.get("locale") or parsed.get("ip"):
+                _PUBLIC_GEOIP_CACHE = parsed
+                return dict(parsed)
+        except (OSError, ValueError, urllib.error.URLError):
+            continue
+
+    _PUBLIC_GEOIP_CACHE = {"timezone": None, "locale": None, "ip": None}
+    return dict(_PUBLIC_GEOIP_CACHE)
+
+
+def _parse_ipapi_geo(payload: dict[str, Any]) -> dict[str, str | None]:
+    languages = str(payload.get("languages") or "")
+    locale = languages.split(",", 1)[0].strip() or _locale_for_country(payload.get("country_code"))
+    return {
+        "timezone": _clean_geo_string(payload.get("timezone")),
+        "locale": _clean_geo_string(locale),
+        "ip": _clean_geo_string(payload.get("ip")),
+    }
+
+
+def _parse_ipwhois_geo(payload: dict[str, Any]) -> dict[str, str | None]:
+    timezone_payload = payload.get("timezone") if isinstance(payload.get("timezone"), dict) else {}
+    return {
+        "timezone": _clean_geo_string(timezone_payload.get("id")),
+        "locale": _locale_for_country(payload.get("country_code")),
+        "ip": _clean_geo_string(payload.get("ip")),
+    }
+
+
+def _locale_for_country(country_code: Any) -> str | None:
+    country = str(country_code or "").strip().upper()
+    if not country:
+        return None
+    language = {
+        "US": "en",
+        "GB": "en",
+        "CA": "en",
+        "AU": "en",
+        "NZ": "en",
+        "IE": "en",
+    }.get(country, "en")
+    return f"{language}-{country}"
+
+
+def _clean_geo_string(value: Any) -> str | None:
+    text = str(value or "").strip()
+    return text or None
 
 
 def _patch_class(cls: type, *, async_mode: bool) -> None:

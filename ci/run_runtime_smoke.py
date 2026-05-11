@@ -12,8 +12,8 @@ FORBIDDEN_ARGS = ("--disable-gpu", "--disable-extensions", "--enable-automation"
 REQUIRED_ARGS = (
     "--fingerprint",
     "--fingerprint-noise=false",
-    "--fingerprint-screen-width=1920",
-    "--fingerprint-screen-height=1080",
+    "--fingerprint-screen-width=1440",
+    "--fingerprint-screen-height=960",
 )
 
 
@@ -73,12 +73,12 @@ async def main() -> int:
         result["main_command_line"] = main_commands[0]
         assert "--enable-automation" not in main_commands[0], main_commands[0]
         assert main_commands[0].count("--no-sandbox") == 1, main_commands[0]
-        assert main_commands[0].count("--disable-dev-shm-usage") == 1, main_commands[0]
+        assert "--disable-dev-shm-usage" not in main_commands[0], main_commands[0]
         assert result["dimensions"] == {
-            "innerWidth": 1920,
-            "innerHeight": 1080,
-            "screenWidth": 1920,
-            "screenHeight": 1080,
+            "innerWidth": 1440,
+            "innerHeight": 960,
+            "screenWidth": 1440,
+            "screenHeight": 960,
         }
         await core.close(delete_profile=False)
         result["remaining_command_lines"] = wait_for_process_cleanup(str(core.profile_dir))

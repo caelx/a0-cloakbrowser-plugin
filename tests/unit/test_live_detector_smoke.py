@@ -46,10 +46,10 @@ def test_target_checks_include_infrastructure_checks(tmp_path):
             "environment": {
                 "webdriver": False,
                 "userAgent": "Chrome",
-                "innerWidth": 1920,
-                "innerHeight": 1080,
-                "screenWidth": 1920,
-                "screenHeight": 1080,
+                "innerWidth": 1440,
+                "innerHeight": 960,
+                "screenWidth": 1440,
+                "screenHeight": 960,
             },
         },
     )

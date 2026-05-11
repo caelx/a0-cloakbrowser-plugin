@@ -109,7 +109,6 @@ def test_shadow_dom_script_is_noop_and_restored(monkeypatch):
         lambda: {
             "advanced": {
                 "disable_shadow_dom_init_patch": True,
-                "preserve_headed_placeholder_page": True,
             },
             "runtime": {"headed": True},
         },
@@ -127,7 +126,7 @@ def test_shadow_dom_script_is_noop_and_restored(monkeypatch):
     assert FakeRuntimeCore._shadow_dom_script() == "original"
 
 
-def test_headed_close_all_leaves_one_about_blank(monkeypatch):
+def test_headed_close_all_delegates_upstream(monkeypatch):
     install_fake_runtime(monkeypatch)
     monkeypatch.setattr(runtime_patch, "_agent_zero_import_context", lambda: _NullContext())
     monkeypatch.setattr(
@@ -135,7 +134,6 @@ def test_headed_close_all_leaves_one_about_blank(monkeypatch):
         lambda: {
             "advanced": {
                 "disable_shadow_dom_init_patch": True,
-                "preserve_headed_placeholder_page": True,
             },
             "runtime": {"headed": True},
         },
@@ -149,14 +147,14 @@ def test_headed_close_all_leaves_one_about_blank(monkeypatch):
 
     result = asyncio.run(core.close_all())
 
-    assert result["browsers"] == [{"id": 1, "currentUrl": "about:blank"}]
-    assert result["last_interacted_browser_id"] == 1
-    assert about_blank.closed is False
+    assert core.original_close_all_called is True
+    assert result == {"browsers": [], "last_interacted_browser_id": None}
+    assert about_blank.closed is True
     assert user_page.closed is True
     runtime_patch.unpatch_runtime()
 
 
-def test_headed_close_all_creates_placeholder_when_missing(monkeypatch):
+def test_headed_close_all_does_not_create_placeholder_when_missing(monkeypatch):
     install_fake_runtime(monkeypatch)
     monkeypatch.setattr(runtime_patch, "_agent_zero_import_context", lambda: _NullContext())
     monkeypatch.setattr(
@@ -164,7 +162,6 @@ def test_headed_close_all_creates_placeholder_when_missing(monkeypatch):
         lambda: {
             "advanced": {
                 "disable_shadow_dom_init_patch": True,
-                "preserve_headed_placeholder_page": True,
             },
             "runtime": {"headed": True},
         },
@@ -177,14 +174,14 @@ def test_headed_close_all_creates_placeholder_when_missing(monkeypatch):
 
     result = asyncio.run(core.close_all())
 
-    assert len(result["browsers"]) == 1
-    assert result["browsers"][0]["currentUrl"] == "about:blank"
+    assert core.original_close_all_called is True
+    assert result == {"browsers": [], "last_interacted_browser_id": None}
     assert user_page.closed is True
-    assert len([page for page in core.context.pages if not page.closed]) == 1
+    assert [page for page in core.context.pages if not page.closed] == []
     runtime_patch.unpatch_runtime()
 
 
-def test_headed_close_all_browsers_leaves_one_about_blank(monkeypatch):
+def test_headed_close_all_browsers_delegates_upstream(monkeypatch):
     install_fake_runtime(monkeypatch)
     monkeypatch.setattr(runtime_patch, "_agent_zero_import_context", lambda: _NullContext())
     monkeypatch.setattr(
@@ -192,7 +189,6 @@ def test_headed_close_all_browsers_leaves_one_about_blank(monkeypatch):
         lambda: {
             "advanced": {
                 "disable_shadow_dom_init_patch": True,
-                "preserve_headed_placeholder_page": True,
             },
             "runtime": {"headed": True},
         },
@@ -206,8 +202,8 @@ def test_headed_close_all_browsers_leaves_one_about_blank(monkeypatch):
 
     result = asyncio.run(core.close_all_browsers())
 
-    assert result["browsers"] == [{"id": 1, "currentUrl": "about:blank"}]
-    assert about_blank.closed is False
+    assert result == {"browsers": [], "last_interacted_browser_id": None}
+    assert about_blank.closed is True
     assert user_page.closed is True
     runtime_patch.unpatch_runtime()
 
@@ -220,7 +216,6 @@ def test_headless_close_all_delegates_upstream(monkeypatch):
         lambda: {
             "advanced": {
                 "disable_shadow_dom_init_patch": True,
-                "preserve_headed_placeholder_page": True,
             },
             "runtime": {"headed": False},
         },
@@ -245,7 +240,6 @@ def test_unpatch_restores_original_close_all(monkeypatch):
         lambda: {
             "advanced": {
                 "disable_shadow_dom_init_patch": True,
-                "preserve_headed_placeholder_page": True,
             },
             "runtime": {"headed": True},
         },
@@ -254,7 +248,7 @@ def test_unpatch_restores_original_close_all(monkeypatch):
     runtime_patch.unpatch_runtime()
     original_close_all = FakeRuntimeCore.close_all
     runtime_patch.apply_runtime_patch()
-    assert FakeRuntimeCore.close_all is not original_close_all
+    assert FakeRuntimeCore.close_all is original_close_all
 
     runtime_patch.unpatch_runtime()
 
