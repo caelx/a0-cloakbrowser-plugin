@@ -97,6 +97,24 @@ def install_fake_runtime(monkeypatch):
     monkeypatch.setitem(sys.modules, "plugins._browser.helpers.runtime", runtime_mod)
 
 
+def test_agent_zero_import_context_uses_git_fallback_for_materialized_plugin(
+    monkeypatch, tmp_path
+):
+    root = tmp_path / "a0" / "usr" / "plugins" / "cloakbrowser"
+    root.mkdir(parents=True)
+    fallback = tmp_path / "git" / "agent-zero"
+    (fallback / "plugins" / "_browser").mkdir(parents=True)
+    (fallback / "helpers").mkdir()
+    (fallback / "helpers" / "tool.py").write_text("", encoding="utf-8")
+    monkeypatch.setattr("helpers.config.plugin_dir", lambda: root)
+    monkeypatch.setattr(runtime_patch, "AGENT_ZERO_FALLBACK_DIR", fallback)
+    monkeypatch.setattr(sys, "path", [str(root)])
+
+    with runtime_patch._agent_zero_import_context():
+        assert str(root) not in sys.path
+        assert str(fallback) in sys.path
+
+
 def test_shadow_dom_script_is_noop_and_restored(monkeypatch):
     install_fake_runtime(monkeypatch)
     monkeypatch.setattr(

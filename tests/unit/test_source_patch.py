@@ -26,6 +26,8 @@ def test_patch_runtime_source_applies_and_records(monkeypatch, tmp_path):
     assert "if page.url == \"about:blank\":" in patched_text
     assert "Browser context could not open a new tab; restarting." in patched_text
     assert "_cloakbrowser_open_restart_lock" in patched_text
+    assert 'Path as _cloakbrowser_path' in patched_text
+    assert '"/a0/usr/plugins/cloakbrowser"' in patched_text
     assert "gc.collect()" in patched_text
     assert "await asyncio.sleep(0.25)" in patched_text
     assert "playwright = self.playwright" in patched_text

@@ -5,6 +5,8 @@ import sys
 import types
 from pathlib import Path
 
+AGENT_ZERO_FALLBACK_DIR = Path("/git/agent-zero")
+
 
 def plugin_import(module: str):
     root = Path(__file__).resolve().parent
@@ -41,9 +43,12 @@ def plugin_import(module: str):
 
 def ensure_agent_zero_path(root: Path | None = None) -> None:
     root = root or Path(__file__).resolve().parent
-    for parent in root.parents:
-        if (parent / "plugins" / "_browser").is_dir() and (parent / "helpers" / "tool.py").is_file():
-            parent_str = str(parent)
-            if parent_str not in sys.path:
-                sys.path.insert(0, parent_str)
+    for candidate in (*root.parents, AGENT_ZERO_FALLBACK_DIR):
+        if (
+            (candidate / "plugins" / "_browser").is_dir()
+            and (candidate / "helpers" / "tool.py").is_file()
+        ):
+            candidate_str = str(candidate)
+            if candidate_str not in sys.path:
+                sys.path.insert(0, candidate_str)
             return
