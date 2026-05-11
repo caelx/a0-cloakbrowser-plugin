@@ -7,6 +7,9 @@ from helpers import extensions
 def test_sync_browser_extension_paths_uses_upstream_browser_config(monkeypatch, tmp_path):
     paths = extensions.managed_extension_paths()
     ubol = paths["ublock_origin_lite"]
+    stale_ubol = Path(
+        "/git/agent-zero/usr/plugins/cloakbrowser/.cloakbrowser/extensions/ublock-origin-lite"
+    )
     monkeypatch.setattr(
         extensions,
         "managed_extension_paths",
@@ -25,7 +28,10 @@ def test_sync_browser_extension_paths_uses_upstream_browser_config(monkeypatch, 
     monkeypatch.setattr(
         extensions,
         "_agent_zero_browser_config_helpers",
-        lambda: (helpers_plugins, lambda: {"extension_paths": ["/external", str(ubol)]}),
+        lambda: (
+            helpers_plugins,
+            lambda: {"extension_paths": ["/external", str(stale_ubol), str(ubol)]},
+        ),
     )
 
     active = extensions.sync_browser_extension_paths(
@@ -81,9 +87,12 @@ def test_sync_browser_extension_paths_dedupes_exact_paths(monkeypatch, tmp_path)
 
 
 def test_disable_managed_extension_paths_removes_upstream_browser_config(monkeypatch, tmp_path):
-    ubol = tmp_path / "ubol"
-    cookies = tmp_path / "cookies"
-    bpc = tmp_path / "bpc"
+    ubol = tmp_path / "ublock-origin-lite"
+    cookies = tmp_path / "i-still-dont-care-about-cookies"
+    bpc = tmp_path / "bypass-paywalls-clean"
+    stale_cookies = Path(
+        "/git/agent-zero/usr/plugins/cloakbrowser/.cloakbrowser/extensions/i-still-dont-care-about-cookies"
+    )
     monkeypatch.setattr(
         extensions,
         "managed_extension_paths",
@@ -102,13 +111,13 @@ def test_disable_managed_extension_paths_removes_upstream_browser_config(monkeyp
         "_agent_zero_browser_config_helpers",
         lambda: (
             helpers_plugins,
-            lambda: {"extension_paths": [str(ubol), "/external", str(cookies)]},
+            lambda: {"extension_paths": [str(ubol), "/external", str(stale_cookies), str(cookies)]},
         ),
     )
 
     removed = extensions.disable_managed_extension_paths()
 
-    assert removed == [str(ubol), str(cookies)]
+    assert removed == [str(ubol), str(stale_cookies), str(cookies)]
     assert saved["extension_paths"] == ["/external"]
 
 

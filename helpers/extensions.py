@@ -164,11 +164,11 @@ def sync_browser_extension_paths(config: dict[str, Any] | None = None) -> list[s
         plugins, get_browser_config = _agent_zero_browser_config_helpers()
 
         browser_config = get_browser_config()
-        current_paths = _dedupe_paths(
+        current_paths = [
             str(Path(path).expanduser()) for path in browser_config.get("extension_paths", [])
-        )
-        managed = {str(path) for path in managed_extension_paths().values()}
-        preserved = [path for path in current_paths if path not in managed]
+        ]
+        managed = managed_extension_paths()
+        preserved = [path for path in current_paths if not _is_managed_extension_path(path, managed)]
         browser_config["extension_paths"] = _dedupe_paths(
             preserved + [path for path in active if path not in preserved]
         )
@@ -183,12 +183,12 @@ def disable_managed_extension_paths() -> list[str]:
     try:
         plugins, get_browser_config = _agent_zero_browser_config_helpers()
 
-        managed = {str(path) for path in managed_extension_paths().values()}
+        managed = managed_extension_paths()
         browser_config = get_browser_config()
         paths = []
         for path in browser_config.get("extension_paths", []):
             normalized = str(Path(path).expanduser())
-            if normalized in managed:
+            if _is_managed_extension_path(normalized, managed):
                 removed.append(normalized)
                 continue
             paths.append(path)
@@ -252,6 +252,22 @@ def uninstall_managed_extension(key: str, *, remove_files: bool = False) -> dict
 
 def _is_loadable(path: Path) -> bool:
     return (path / "manifest.json").is_file()
+
+
+def _is_managed_extension_path(path: str, managed: dict[str, Path]) -> bool:
+    candidate = Path(path).expanduser()
+    if str(candidate) in {str(item) for item in managed.values()}:
+        return True
+    parts = candidate.parts
+    names = {item.name for item in managed.values()}
+    return (
+        candidate.name in names
+        and len(parts) >= 3
+        and any(
+            parts[index : index + 2] == (".cloakbrowser", "extensions")
+            for index in range(len(parts) - 1)
+        )
+    )
 
 
 def _dedupe_paths(paths) -> list[str]:
