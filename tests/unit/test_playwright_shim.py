@@ -91,9 +91,11 @@ def test_build_launch_overrides_drops_explicit_no_sandbox(monkeypatch):
 
 def test_build_launch_overrides_uses_old_working_profile_defaults(monkeypatch):
     from helpers import playwright_shim
+    from helpers import install_manifest
     from helpers.config import normalize_config
 
     geoip_calls = []
+    saved_manifests = []
     package = ModuleType("cloakbrowser")
     package.ensure_binary = lambda: "/opt/cloakbrowser/chrome"
     browser_module = ModuleType("cloakbrowser.browser")
@@ -137,10 +139,17 @@ def test_build_launch_overrides_uses_old_working_profile_defaults(monkeypatch):
             "ip": "203.0.113.10",
         },
     )
+    monkeypatch.setattr(install_manifest, "load_manifest", lambda: {})
+    monkeypatch.setattr(
+        install_manifest,
+        "save_manifest",
+        lambda manifest: saved_manifests.append(dict(manifest)) or manifest,
+    )
 
-    launch_kwargs, _info = playwright_shim.build_launch_overrides({}, persistent=True)
+    launch_kwargs, info = playwright_shim.build_launch_overrides({}, persistent=True)
 
     assert geoip_calls == []
+    assert info["launcher"] == "cloakbrowser.launch_persistent_context_async"
     assert launch_kwargs["headless"] is False
     assert launch_kwargs["viewport"] == {"width": 1440, "height": 960}
     assert launch_kwargs["screen"] == {"width": 1440, "height": 960}
@@ -151,6 +160,17 @@ def test_build_launch_overrides_uses_old_working_profile_defaults(monkeypatch):
     assert "--fingerprint-timezone=America/New_York" in launch_kwargs["args"]
     assert "--fingerprint-locale=en-US" in launch_kwargs["args"]
     assert "--fingerprint-webrtc-ip=203.0.113.10" in launch_kwargs["args"]
+    assert saved_manifests[-1]["last_launch"]["launcher"] == (
+        "cloakbrowser.launch_persistent_context_async"
+    )
+    assert saved_manifests[-1]["last_launch"]["final_args"]
+    assert saved_manifests[-1]["effective_location"] == {
+        "geoip": True,
+        "proxy": False,
+        "timezone": "America/New_York",
+        "locale": "en-US",
+        "exit_ip": "203.0.113.10",
+    }
 
 
 def test_build_launch_overrides_uses_cloakbrowser_geoip_for_proxy(monkeypatch):

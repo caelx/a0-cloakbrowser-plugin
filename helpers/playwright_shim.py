@@ -191,6 +191,11 @@ def build_launch_overrides(kwargs: dict[str, Any], *, persistent: bool) -> tuple
     info = {
         "patched": True,
         "persistent": persistent,
+        "launcher": (
+            "cloakbrowser.launch_persistent_context_async"
+            if persistent
+            else "cloakbrowser.launch_async"
+        ),
         "binary": binary,
         "headless": headless,
         "dropped_args": dropped_args,
@@ -204,6 +209,7 @@ def build_launch_overrides(kwargs: dict[str, Any], *, persistent: bool) -> tuple
     }
     _STATE["last_launch"] = info
     _STATE["effective_location"] = effective_location
+    _record_last_launch(info)
     return launch_kwargs, info
 
 
@@ -296,6 +302,18 @@ def _record_effective_location(effective_location: dict[str, Any]) -> None:
 
         manifest = load_manifest()
         manifest["effective_location"] = dict(effective_location)
+        save_manifest(manifest)
+    except Exception:
+        pass
+
+
+def _record_last_launch(info: dict[str, Any]) -> None:
+    try:
+        from .install_manifest import load_manifest, save_manifest
+
+        manifest = load_manifest()
+        manifest["last_launch"] = dict(info)
+        manifest["effective_location"] = dict(info.get("effective_location") or {})
         save_manifest(manifest)
     except Exception:
         pass
