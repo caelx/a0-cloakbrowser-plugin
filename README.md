@@ -5,9 +5,9 @@
 CloakBrowser-backed overlay for Agent Zero's built-in Browser tool.
 
 The plugin is installed as a normal Agent Zero GitHub plugin because `plugin.yaml`
-lives at the repository root. It exposes a `Browser` tool that delegates to
-Agent Zero's upstream `_browser` tool and patches only the launch boundary so
-browser sessions use CloakBrowser.
+lives at the repository root. It does not expose its own Browser tool; upstream
+`_browser` owns the Browser UI and action stack, while CloakBrowser patches only
+the launch boundary when the plugin is enabled.
 
 ## Install
 
@@ -23,14 +23,18 @@ https://github.com/caelx/a0-cloakbrowser-plugin.git
 ```
 
 ```bash
-cd /a0/usr/plugins/cloakbrowser
+plugin_dir="$(PYTHONPATH=/git/agent-zero python - <<'PY'
+from helpers import plugins
+print(plugins.find_plugin_dir("cloakbrowser"))
+PY
+)"
+cd "$plugin_dir"
 python execute.py setup --noninteractive
 python execute.py status
 ```
 
-The built-in `_browser` plugin may be disabled in the UI if you want to avoid
-duplicate Browser tool entries. CloakBrowser still relies on `_browser` runtime
-code and extension configuration.
+The built-in `_browser` plugin must remain enabled because it owns the Browser
+tool, runtime, profiles, downloads, screenshots, and extension configuration.
 
 ## Commands
 
@@ -52,19 +56,18 @@ scripts. `repair` reruns setup over an existing install. `status` writes
 diagnostics for dependencies, display, extensions, runtime patch state, and
 effective config. `uninstall` removes plugin-managed setup files and leaves
 profiles and browser data intact.
-If CloakBrowser is disabled in Agent Zero, `python execute.py` runs uninstall
-instead of setup; image builds and repair automation can pass `--force` to set
-up the plugin anyway.
+If CloakBrowser is disabled in Agent Zero, `python execute.py` removes
+plugin-managed runtime hooks/state instead of running setup. Image builds and
+repair automation can pass `--force` to set up the plugin anyway.
 
-`hooks.py` is intentionally lightweight and does not install packages, patch
-Agent Zero, or remove files.
+`hooks.py` is intentionally lightweight. Its uninstall hook delegates to the
+same cleanup path as `execute.py uninstall --remove-extensions`.
 
 ## Implementation
 
-`tools/browser.py` exposes `Browser` by delegating to
-`plugins._browser.tools.browser.Browser`. The plugin does not copy Agent Zero's
-browser action stack; refs, screenshots, uploads, downloads, profiles, content
-extraction, page registration, and close behavior remain owned by `_browser`.
+The plugin does not copy Agent Zero's browser action stack; refs, screenshots,
+uploads, downloads, profiles, content extraction, page registration, keyboard
+handling, typing, and close behavior remain owned by `_browser`.
 
 Setup seeds a CloakBrowser masquerade binary into Agent Zero's Playwright cache
 using the same shape `_browser` expects:
@@ -75,26 +78,21 @@ usr/plugins/_browser/playwright/chromium-cloakbrowser/chrome-linux/chrome
 
 That lets `_browser.helpers.playwright.get_playwright_binary(full_browser=True)`
 resolve a Chromium-shaped binary without forcing stock Playwright Chromium to be
-installed first. During setup, the plugin also patches Agent Zero's
-`_browser/helpers/runtime.py` so the built-in Browser runtime routes launch
-kwargs through CloakBrowser before `launch_persistent_context`.
+installed first. Setup also applies a lightweight removable source bootstrap to
+upstream `_browser/helpers/runtime.py`. The bootstrap delegates only the launch
+and headed lifecycle seams to this plugin when CloakBrowser is enabled; when the
+plugin is disabled it returns to upstream launch behavior.
 
-The source patch is guarded by `advanced.patch_runtime_file_if_needed`, records
-the original and patched file hashes plus a backup path in the install manifest,
-and is restored on uninstall only when the current file still matches the
-plugin-patched hash. Process-local runtime and Playwright monkey patches remain
-as fallback support for smoke tests and development runs.
+The source bootstrap intentionally changes only the `_browser` seams
+CloakBrowser needs:
 
-The runtime patch intentionally changes only the `_browser` seams CloakBrowser
-needs:
-
+- Persistent browser launch is routed through CloakBrowser's bundled
+  `launch_persistent_context_async` wrapper so humanize and CloakBrowser launch
+  arguments are active.
 - The open-shadow-DOM init script is replaced with a no-op when
-  `advanced.disable_shadow_dom_init_patch` is enabled. This matches the effective
-  Ghostship CloakBrowser behavior without editing Agent Zero source files.
-- CloakBrowser 0.3.27 cannot create a new tab after the sole startup target has
-  been closed, so the patch keeps that unregistered startup target only until
-  `open` turns it into the requested first visible Browser page. `close_all`
-  still returns the upstream empty Browser list and does not respawn a tab.
+  `advanced.disable_shadow_dom_init_patch` is enabled.
+- Headed mode keeps the startup `about:blank` page and recovers if closing the
+  visible browser leaves a stale context.
 
 Annotation, input forwarding, visible tab selection, screenshots, and Browser UI
 rendering remain owned by upstream `_browser`.
@@ -116,9 +114,9 @@ profiles remain under Agent Zero's `tmp/browser/sessions`.
 Default network and identity settings follow the old working Ghostship profile:
 `geoip=true`, timezone/locale are resolved by CloakBrowser GeoIP unless
 explicitly configured, `webrtc_ip_mode=auto`, and `fingerprint_platform=Windows`.
-The cookie annoyance extension update is enabled by default during setup. If
-GeoIP is explicitly disabled, blank timezone/locale values fall back to the
-local process environment when possible.
+Effective timezone, locale, and exit IP are stored in status diagnostics after a
+launch. If GeoIP is explicitly disabled, blank timezone/locale values fall back
+to the local process environment when possible.
 
 ## Display
 
@@ -141,26 +139,23 @@ process for local development.
 
 The plugin supports unpacked Chromium extension folders under
 `.cloakbrowser/extensions/` and enables them through Agent Zero `_browser`
-`extension_paths`.
+`extension_paths`. All extensions default off. Each extension has a single
+`Enable <extension>` checkbox; when checked, Execute installs or updates that
+extension and enables it. When unchecked, Execute removes that extension from
+`_browser.extension_paths` but leaves installed files in place for reuse.
 
 - uBlock Origin Lite installs from `uBlockOrigin/uBOL-home`.
 - I still don't care about cookies installs from the Chrome Web Store CRX for
   `edibdbjcniadpccecjdfdjjppcpchdlm`.
-- Bypass Paywalls Clean is opt-in and installs from the supplied GitFlic zip:
+- Bypass Paywalls Clean installs from the supplied GitFlic zip:
   `https://gitflic.ru/project/magnolia1234/bpc_uploads/blob/raw?file=bypass-paywalls-chrome-clean-master.zip`.
-
-Execute reuses installed extensions by default. If an extension's
-`update_*_on_setup` config option is enabled, Execute refreshes that extension
-during setup and reports it as updated.
 
 BPC has managed opt-ins under `bypass_paywalls_clean`: setCookie, custom sites,
 and update checks default enabled. When custom sites are enabled, setup uses
 BPC's upstream custom manifest so Chromium grants `*://*/*` host access.
 
-`sync_browser_extension_paths()` owns only the current managed extension paths
-for this plugin install and exact-dedupes entries. If a live image has stale
-paths from an older plugin root, reset `_browser` config/browser profile data
-and rerun setup.
+`sync_browser_extension_paths()` owns only managed CloakBrowser extension paths
+and exact-dedupes entries.
 
 No paid-content bypass tests are run. CI only validates installation, manifest
 loading, enable/disable behavior, and launch argument inclusion.
@@ -174,27 +169,24 @@ python execute.py uninstall --noninteractive
 ```
 
 Uninstall disables plugin-managed `_browser` extension paths, restores the
-runtime source patch when the patched file hash still matches, removes
-in-process patches where possible, removes plugin-managed shim/supervisor files
-recorded in the install manifest, and preserves browser profiles, downloads,
-screenshots, cookies, and local storage. If setup started a direct
-plugin-managed Xvfb process, uninstall terminates the recorded PID after
-verifying it is an Xvfb process for the recorded display.
+upstream `_browser` runtime source from the hash-checked backup, removes
+plugin-managed shim/supervisor files recorded in the install manifest, and
+preserves browser profiles, downloads, screenshots, cookies, and local storage.
+If setup started a direct plugin-managed Xvfb
+process, uninstall terminates the recorded PID after verifying it is an Xvfb
+process for the recorded display. Restart is not required for future launches.
 
 ## Validation
 
 ```bash
 uv run --group dev pytest -s tests/unit
 uv run --group dev pytest -s tests/integration
-bash ci/run_agent_zero_integration.sh
 ```
 
-Docker-backed integration requires a working Docker engine. The default Docker
-integration uses `--shm-size=2g`; production containers should provide at least
-`2 GB` of `/dev/shm` for headed CloakBrowser, for example Docker or Podman
-`--shm-size=2g`. The CI matrix also runs a small-shm smoke with `64m` to prove
-the browser starts with constrained shared memory when explicitly configured for
-that environment.
+Container integration runs in GitHub CI. The default CI container uses
+`--shm-size=2g`; production containers should provide at least `2 GB` of
+`/dev/shm` for headed CloakBrowser, for example Docker or Podman
+`--shm-size=2g`.
 See `docs/chill-penguin-crash-analysis.md` for the symbolicated production dump
 evidence behind this mitigation.
 
@@ -223,7 +215,5 @@ browsing smoke navigates 20 pages in one CloakBrowser session, captures DOM and
 screenshots, verifies the session remains alive, and writes
 `artifacts/heavy-browsing-results.json`.
 
-The uninstall smoke verifies extension cleanup, masquerade removal, patch state,
-and profile preservation. It records stock `_browser` launch verification as
-skipped because removing the masquerade can leave no stock Playwright Chromium
-installed in the Agent Zero image.
+The uninstall smoke verifies extension cleanup, masquerade removal, runtime
+source restoration, patch state, and profile preservation.

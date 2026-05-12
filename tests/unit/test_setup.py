@@ -23,7 +23,6 @@ def test_setup_failure_rolls_back_plugin_owned_state(monkeypatch, tmp_path):
     monkeypatch.setattr(setup, "install_system_dependencies", lambda noninteractive: {"ok": True})
     monkeypatch.setattr(setup, "install_python_dependencies", lambda: {"ok": True})
     monkeypatch.setattr(setup, "ensure_masquerade", lambda binary: tmp_path / "chrome")
-    monkeypatch.setattr(setup, "patch_runtime_source", lambda manifest, cfg: {"applied": True})
     monkeypatch.setattr(
         setup, "ensure_display", lambda cfg, manifest: {"ok": True, "display": ":99"}
     )
@@ -101,7 +100,6 @@ def test_late_setup_failure_preserves_previous_successful_state(monkeypatch, tmp
     monkeypatch.setattr(setup, "install_system_dependencies", lambda noninteractive: {"ok": True})
     monkeypatch.setattr(setup, "install_python_dependencies", lambda: {"ok": True})
     monkeypatch.setattr(setup, "ensure_masquerade", lambda binary: tmp_path / "chrome")
-    monkeypatch.setattr(setup, "patch_runtime_source", lambda manifest, cfg: {"applied": True})
     monkeypatch.setattr(
         setup, "ensure_display", lambda cfg, manifest: {"ok": True, "display": ":99"}
     )

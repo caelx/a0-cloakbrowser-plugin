@@ -37,18 +37,11 @@ advanced:
   extra_args: []
   filter_default_playwright_args: true
   disable_shadow_dom_init_patch: true
-  patch_runtime_file_if_needed: true
 
 extensions:
-  install_ublock_origin_lite: true
-  enable_ublock_origin_lite: true
-  update_ublock_origin_lite_on_setup: false
-  install_i_still_dont_care_about_cookies: true
-  enable_i_still_dont_care_about_cookies: true
-  update_i_still_dont_care_about_cookies_on_setup: true
-  install_bypass_paywalls_clean: false
+  enable_ublock_origin_lite: false
+  enable_i_still_dont_care_about_cookies: false
   enable_bypass_paywalls_clean: false
-  update_bypass_paywalls_clean_on_setup: false
 
 ublock_origin_lite:
   filtering_mode: "complete"

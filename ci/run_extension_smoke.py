@@ -24,9 +24,9 @@ async def main() -> int:
     browser_config = get_browser_config()
     launch = build_browser_launch_config(browser_config)
     bpc_enabled_config = copy.deepcopy(get_config())
-    bpc_enabled_config["extensions"]["install_bypass_paywalls_clean"] = True
+    bpc_enabled_config["extensions"]["enable_ublock_origin_lite"] = True
+    bpc_enabled_config["extensions"]["enable_i_still_dont_care_about_cookies"] = True
     bpc_enabled_config["extensions"]["enable_bypass_paywalls_clean"] = True
-    bpc_enabled_config["extensions"]["update_bypass_paywalls_clean_on_setup"] = True
     manifest: dict[str, object] = {}
     installed = install_configured_extensions(bpc_enabled_config, manifest)
     bpc_path = str(managed_extension_paths()["bypass_paywalls_clean"])

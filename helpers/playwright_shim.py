@@ -74,6 +74,7 @@ def status() -> dict[str, Any]:
         "persistent": False,
         "patched_targets": list(_STATE.get("patched_targets", [])),
         "last_launch": dict(_STATE.get("last_launch", {})),
+        "effective_location": dict(_STATE.get("effective_location", {})),
         "async_error": _STATE.get("async_error", ""),
         "sync_error": _STATE.get("sync_error", ""),
         "arg_filtering": "always_on",
@@ -112,8 +113,8 @@ def build_launch_overrides(kwargs: dict[str, Any], *, persistent: bool) -> tuple
     if not should_patch_launch(kwargs):
         return dict(kwargs), {"patched": False, "reason": "launch outside CloakBrowser criteria"}
 
+    import cloakbrowser.browser as cloak_browser
     from cloakbrowser import ensure_binary
-    from cloakbrowser.browser import build_args, maybe_resolve_geoip
     from cloakbrowser.config import IGNORE_DEFAULT_ARGS
 
     binary = ensure_binary()
@@ -128,23 +129,36 @@ def build_launch_overrides(kwargs: dict[str, Any], *, persistent: bool) -> tuple
     filtered_args = dedupe_args(filtered_args)
 
     proxy = cfg["network_location"]["proxy"] or None
+    proxy_kwargs, proxy_extra_args = _resolve_proxy_config(cloak_browser, proxy)
+    filtered_args.extend(proxy_extra_args)
     timezone = cfg["network_location"]["timezone"] or None
     locale = cfg["network_location"]["locale"] or None
     geoip = bool(cfg["network_location"]["geoip"])
     timezone, locale, exit_ip = resolve_location(
-        maybe_resolve_geoip,
+        cloak_browser.maybe_resolve_geoip,
         geoip=geoip,
         proxy=proxy,
         timezone=timezone,
         locale=locale,
     )
+    effective_location = {
+        "geoip": geoip,
+        "proxy": bool(proxy),
+        "timezone": timezone or "",
+        "locale": locale or "",
+        "exit_ip": exit_ip or "",
+    }
+    _record_effective_location(effective_location)
     if cfg["network_location"]["webrtc_ip_mode"] == "auto" and exit_ip:
         filtered_args.append(f"--fingerprint-webrtc-ip={exit_ip}")
+    elif cfg["network_location"]["webrtc_ip_mode"] == "auto" and proxy:
+        filtered_args.append("--fingerprint-webrtc-ip=auto")
     elif cfg["network_location"]["webrtc_ip_mode"] == "explicit" and cfg["network_location"]["webrtc_ip"]:
         filtered_args.append(f"--fingerprint-webrtc-ip={cfg['network_location']['webrtc_ip']}")
+    filtered_args = _resolve_webrtc_args(cloak_browser, filtered_args, proxy)
 
     headless = not bool(cfg["runtime"]["headed"])
-    final_args = build_args(
+    final_args = cloak_browser.build_args(
         True,
         filtered_args,
         timezone=timezone,
@@ -172,8 +186,7 @@ def build_launch_overrides(kwargs: dict[str, Any], *, persistent: bool) -> tuple
     if cfg["humanization"]["humanize"]:
         launch_kwargs["humanize"] = True
         launch_kwargs["human_preset"] = cfg["humanization"]["human_preset"]
-    if proxy:
-        launch_kwargs["proxy"] = proxy
+    launch_kwargs.update(proxy_kwargs)
 
     info = {
         "patched": True,
@@ -184,17 +197,19 @@ def build_launch_overrides(kwargs: dict[str, Any], *, persistent: bool) -> tuple
         "final_args": redact_args(final_args),
         "viewport": launch_kwargs["viewport"],
         "screen": launch_kwargs["screen"],
+        "effective_location": effective_location,
         "shared_memory": {
             "disable_dev_shm_usage": "--disable-dev-shm-usage" not in launch_kwargs["ignore_default_args"],
         },
     }
     _STATE["last_launch"] = info
+    _STATE["effective_location"] = effective_location
     return launch_kwargs, info
 
 
 def should_patch_launch(kwargs: dict[str, Any]) -> bool:
     cfg = get_config()
-    if not cfg["runtime"]["enabled"]:
+    if not cfg["runtime"]["enabled"] or not _plugin_enabled():
         return False
     if _IN_CLOAK_LAUNCH.get():
         return False
@@ -209,6 +224,20 @@ def should_patch_launch(kwargs: dict[str, Any]) -> bool:
         or "/plugins/_browser/playwright/" in normalized
         or "/usr/plugins/_browser/playwright/" in normalized
     )
+
+
+def _plugin_enabled() -> bool:
+    try:
+        from .config import PLUGIN_NAME, _without_local_helpers, plugin_dir
+
+        root = plugin_dir()
+        with _without_local_helpers(root):
+            from helpers import plugins
+
+            enabled = plugins.get_enabled_plugins(None)
+        return enabled is None or PLUGIN_NAME in enabled
+    except Exception:
+        return True
 
 
 def redact_args(args: list[str]) -> list[str]:
@@ -242,6 +271,34 @@ def resolve_location(
     if locale is None:
         locale = public_geo.get("locale")
     return timezone, locale, public_geo.get("ip")
+
+
+def _resolve_proxy_config(cloak_browser: Any, proxy: str | None) -> tuple[dict[str, Any], list[str]]:
+    if not proxy:
+        return {}, []
+    resolver = getattr(cloak_browser, "_resolve_proxy_config", None)
+    if callable(resolver):
+        proxy_kwargs, extra_args = resolver(proxy)
+        return dict(proxy_kwargs or {}), list(extra_args or [])
+    return {"proxy": {"server": proxy}}, []
+
+
+def _resolve_webrtc_args(cloak_browser: Any, args: list[str], proxy: str | None) -> list[str]:
+    resolver = getattr(cloak_browser, "_resolve_webrtc_args", None)
+    if not callable(resolver):
+        return args
+    return list(resolver(args, proxy) or [])
+
+
+def _record_effective_location(effective_location: dict[str, Any]) -> None:
+    try:
+        from .install_manifest import load_manifest, save_manifest
+
+        manifest = load_manifest()
+        manifest["effective_location"] = dict(effective_location)
+        save_manifest(manifest)
+    except Exception:
+        pass
 
 
 def _resolve_public_geoip() -> dict[str, str | None]:
@@ -315,16 +372,16 @@ def _patch_class(cls: type, *, async_mode: bool) -> None:
             async def launch(self, **kwargs):
                 if _IN_CLOAK_LAUNCH.get():
                     return await originals["launch"](self, **kwargs)
-                patched_kwargs, _info = build_launch_overrides(kwargs, persistent=False)
-                if "humanize" in patched_kwargs or "human_preset" in patched_kwargs:
+                patched_kwargs, info = build_launch_overrides(kwargs, persistent=False)
+                if info.get("patched"):
                     return await _cloak_launch_async(patched_kwargs)
                 return await originals["launch"](self, **patched_kwargs)
         else:
             def launch(self, **kwargs):
                 if _IN_CLOAK_LAUNCH.get():
                     return originals["launch"](self, **kwargs)
-                patched_kwargs, _info = build_launch_overrides(kwargs, persistent=False)
-                if "humanize" in patched_kwargs or "human_preset" in patched_kwargs:
+                patched_kwargs, info = build_launch_overrides(kwargs, persistent=False)
+                if info.get("patched"):
                     return _cloak_launch_sync(patched_kwargs)
                 return originals["launch"](self, **patched_kwargs)
         setattr(cls, "launch", launch)
@@ -336,16 +393,16 @@ def _patch_class(cls: type, *, async_mode: bool) -> None:
                     return await originals["launch_persistent_context"](
                         self, user_data_dir, **kwargs
                     )
-                patched_kwargs, _info = build_launch_overrides(kwargs, persistent=True)
-                if "humanize" in patched_kwargs or "human_preset" in patched_kwargs:
+                patched_kwargs, info = build_launch_overrides(kwargs, persistent=True)
+                if info.get("patched"):
                     return await _cloak_launch_persistent_async(user_data_dir, patched_kwargs)
                 return await originals["launch_persistent_context"](self, user_data_dir, **patched_kwargs)
         else:
             def launch_persistent_context(self, user_data_dir, **kwargs):
                 if _IN_CLOAK_LAUNCH.get():
                     return originals["launch_persistent_context"](self, user_data_dir, **kwargs)
-                patched_kwargs, _info = build_launch_overrides(kwargs, persistent=True)
-                if "humanize" in patched_kwargs or "human_preset" in patched_kwargs:
+                patched_kwargs, info = build_launch_overrides(kwargs, persistent=True)
+                if info.get("patched"):
                     return _cloak_launch_persistent_sync(user_data_dir, patched_kwargs)
                 return originals["launch_persistent_context"](self, user_data_dir, **patched_kwargs)
         setattr(cls, "launch_persistent_context", launch_persistent_context)

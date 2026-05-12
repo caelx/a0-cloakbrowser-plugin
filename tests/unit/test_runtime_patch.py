@@ -97,7 +97,7 @@ def install_fake_runtime(monkeypatch):
     monkeypatch.setitem(sys.modules, "plugins._browser.helpers.runtime", runtime_mod)
 
 
-def test_agent_zero_import_context_uses_git_fallback_for_materialized_plugin(
+def test_agent_zero_import_context_uses_git_fallback_for_legacy_plugin_root(
     monkeypatch, tmp_path
 ):
     root = tmp_path / "a0" / "usr" / "plugins" / "cloakbrowser"

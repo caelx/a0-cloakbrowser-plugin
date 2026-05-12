@@ -15,7 +15,7 @@ from .extensions import (
 )
 from .install_manifest import load_manifest, mark_setup, record_warning, save_manifest
 from .seed_playwright import ensure_masquerade, remove_masquerade
-from .source_patch import patch_runtime_source, restore_runtime_source_patch
+from .source_patch import patch_runtime_source
 from .xvfb import ensure_display, remove_direct_xvfb_if_owned, remove_supervisor_config_if_owned
 
 
@@ -57,7 +57,6 @@ def setup_plugin(*, noninteractive: bool = False, skip_system_deps: bool = False
             "patching": "process-local",
             "persistent_runtime_patch": False,
         }
-        manifest["runtime_source_patch"] = patch_runtime_source(manifest, cfg)
     except Exception as exc:
         record_warning(manifest, f"CloakBrowser binary setup failed: {exc}")
         manifest["setup_status"] = "failed"
@@ -74,6 +73,7 @@ def setup_plugin(*, noninteractive: bool = False, skip_system_deps: bool = False
         display_result = ensure_display(cfg, manifest)
         extension_installs = install_configured_extensions(cfg, manifest)
         active_paths = sync_browser_extension_paths(cfg)
+        source_patch = patch_runtime_source(manifest)
     except Exception as exc:
         record_warning(manifest, f"Setup failed after dependency install: {exc}")
         rollback = _rollback_failed_setup(manifest, previous_manifest=previous_manifest)
@@ -87,10 +87,11 @@ def setup_plugin(*, noninteractive: bool = False, skip_system_deps: bool = False
             "manifest": manifest,
         }
     runtime_patch = {
-        "patching": "source-file",
+        "patching": "source-bootstrap",
         "persistent": True,
-        "applied_in_setup": bool(manifest.get("runtime_source_patch", {}).get("applied")),
-        "applies_when": "Agent Zero _browser runtime startup",
+        "applied_in_setup": bool(source_patch.get("applied")),
+        "source_patch": source_patch,
+        "applies_when": "Agent Zero _browser runtime import and Browser launch",
     }
     shim_patch = {
         "patching": "process-local",
@@ -137,9 +138,6 @@ def _rollback_failed_setup(
         else remove_masquerade(
             manifest.get("playwright_shim", {}).get("masquerade_path") or None,
         ),
-        "runtime_source_patch": {"restored": False, "preserved_prior_setup": True}
-        if preserve_prior_setup
-        else restore_runtime_source_patch(manifest),
         "supervisor": {"removed": "", "preserved_prior_setup": True}
         if preserve_prior_setup
         else remove_supervisor_config_if_owned(manifest),

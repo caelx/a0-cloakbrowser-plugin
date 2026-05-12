@@ -125,6 +125,12 @@ def _is_plugin_enabled() -> bool:
 
 @contextmanager
 def _without_local_helpers(root: Path):
+    previous_sys_path = list(sys.path)
+    previous_helpers = {
+        name: module
+        for name, module in sys.modules.items()
+        if name == "helpers" or name.startswith("helpers.")
+    }
     removed_entries: list[tuple[int, str]] = []
     removed_modules: dict[str, Any] = {}
     for name, module in list(sys.modules.items()):
@@ -153,10 +159,11 @@ def _without_local_helpers(root: Path):
     try:
         yield
     finally:
-        for index, entry in sorted(removed_entries):
-            sys.path.insert(min(index, len(sys.path)), entry)
-        for name, module in removed_modules.items():
-            sys.modules.setdefault(name, module)
+        sys.path[:] = previous_sys_path
+        for name in list(sys.modules):
+            if name == "helpers" or name.startswith("helpers."):
+                sys.modules.pop(name, None)
+        sys.modules.update(previous_helpers)
 
 
 def format_setup(payload: dict[str, Any]) -> str:
@@ -173,6 +180,7 @@ def format_setup(payload: dict[str, Any]) -> str:
         _format_python_dependencies(setup.get("python", {})),
         _format_cloakbrowser(status.get("cloakbrowser", {}), status.get("config", {})),
         _format_display(setup.get("display", {}), status.get("display", {})),
+        _format_effective_location(status.get("effective_location", {})),
         _format_extensions(setup.get("extension_actions") or setup.get("manifest", {}).get("extension_actions", []), status),
         "",
         _format_readiness(readiness),
@@ -192,6 +200,7 @@ def format_status(status: dict[str, Any]) -> str:
             f"Setup: {_yes_no(status.get('setup', {}).get('installed'))} ({status.get('setup', {}).get('status', 'unknown')})",
             _format_cloakbrowser(status.get("cloakbrowser", {}), status.get("config", {})),
             _format_display({}, status.get("display", {})),
+            _format_effective_location(status.get("effective_location", {})),
             _format_extensions([], status),
             "",
             _format_readiness(readiness),
@@ -249,6 +258,16 @@ def _format_display(setup_display: dict[str, Any], status_display: dict[str, Any
     detail = "reused" if setup_display.get("reused") else setup_display.get("managed_by", "")
     suffix = f"; {detail}" if detail else ""
     return f"Display/Xvfb: {'ready' if usable else 'not ready'}; display={display or 'unset'}{suffix}"
+
+
+def _format_effective_location(location: dict[str, Any]) -> str:
+    if not location:
+        return "Effective location: not recorded yet"
+    timezone = location.get("timezone") or "unset"
+    locale = location.get("locale") or "unset"
+    exit_ip = location.get("exit_ip") or "unset"
+    source = "proxy" if location.get("proxy") else "public"
+    return f"Effective location: timezone={timezone}; locale={locale}; exit_ip={exit_ip}; source={source}"
 
 
 def _format_extensions(actions: list[dict[str, Any]], status: dict[str, Any]) -> str:

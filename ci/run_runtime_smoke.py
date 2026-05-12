@@ -57,7 +57,6 @@ async def main() -> int:
             assert any(
                 arg == required or arg.startswith(required + "=") for arg in final_args
             ), required
-        assert any(arg.startswith("--load-extension=") for arg in final_args)
         for arg in final_args:
             if not (
                 arg.startswith("--load-extension=")

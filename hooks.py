@@ -11,10 +11,17 @@ if str(_ROOT) not in sys.path:
 def install():
     root = Path(__file__).resolve().parent
     if root.name != "cloakbrowser":
-        # Git installs land in /a0/usr/plugins/cloakbrowser. Local validation can run from repo root.
+        # Git installs should land in Agent Zero's canonical usr/plugins root.
         pass
     (root / ".cloakbrowser" / "extensions").mkdir(parents=True, exist_ok=True)
     (root / ".cloakbrowser" / "playwright").mkdir(parents=True, exist_ok=True)
+    return True
+
+
+def uninstall():
+    from plugin_imports import plugin_import
+
+    plugin_import("helpers.uninstall").uninstall(remove_extensions=True)
     return True
 
 

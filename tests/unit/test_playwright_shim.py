@@ -158,6 +158,7 @@ def test_build_launch_overrides_uses_cloakbrowser_geoip_for_proxy(monkeypatch):
     from helpers.config import normalize_config
 
     geoip_calls = []
+    proxy_calls = []
     package = ModuleType("cloakbrowser")
     package.ensure_binary = lambda: "/opt/cloakbrowser/chrome"
     browser_module = ModuleType("cloakbrowser.browser")
@@ -183,6 +184,11 @@ def test_build_launch_overrides_uses_cloakbrowser_geoip_for_proxy(monkeypatch):
 
     browser_module.build_args = build_args
     browser_module.maybe_resolve_geoip = maybe_resolve_geoip
+    browser_module._resolve_proxy_config = lambda proxy: (
+        proxy_calls.append(proxy)
+        or ({"proxy": {"server": proxy}}, ["--proxy-bypass-list=<-loopback>"])
+    )
+    browser_module._resolve_webrtc_args = lambda args, proxy: list(args)
     config_module = ModuleType("cloakbrowser.config")
     config_module.IGNORE_DEFAULT_ARGS = []
     monkeypatch.setitem(sys.modules, "cloakbrowser", package)
@@ -214,6 +220,56 @@ def test_build_launch_overrides_uses_cloakbrowser_geoip_for_proxy(monkeypatch):
     ]
     assert "--fingerprint-timezone=America/Chicago" in launch_kwargs["args"]
     assert "--fingerprint-webrtc-ip=198.51.100.10" in launch_kwargs["args"]
+    assert "--proxy-bypass-list=<-loopback>" in launch_kwargs["args"]
+    assert launch_kwargs["proxy"] == {"server": "http://proxy.test:8080"}
+    assert proxy_calls == ["http://proxy.test:8080"]
+
+
+def test_build_launch_overrides_uses_native_webrtc_proxy_helper(monkeypatch):
+    from helpers import playwright_shim
+    from helpers.config import normalize_config
+
+    package = ModuleType("cloakbrowser")
+    package.ensure_binary = lambda: "/opt/cloakbrowser/chrome"
+    browser_module = ModuleType("cloakbrowser.browser")
+    browser_module.build_args = lambda _stealth, args, **_kwargs: list(args)
+    browser_module.maybe_resolve_geoip = lambda geoip, proxy, timezone, locale: (
+        timezone,
+        locale,
+        None,
+    )
+    browser_module._resolve_proxy_config = lambda proxy: ({}, [f"--proxy-server={proxy}"])
+    browser_module._resolve_webrtc_args = lambda args, proxy: [
+        "--fingerprint-webrtc-ip=198.51.100.55" if arg == "--fingerprint-webrtc-ip=auto" else arg
+        for arg in args
+    ]
+    config_module = ModuleType("cloakbrowser.config")
+    config_module.IGNORE_DEFAULT_ARGS = []
+    monkeypatch.setitem(sys.modules, "cloakbrowser", package)
+    monkeypatch.setitem(sys.modules, "cloakbrowser.browser", browser_module)
+    monkeypatch.setitem(sys.modules, "cloakbrowser.config", config_module)
+    monkeypatch.setattr(playwright_shim, "ensure_masquerade", lambda _binary: None)
+    monkeypatch.setattr(playwright_shim, "apply_environment", lambda _cfg: None)
+    monkeypatch.setattr(playwright_shim, "active_extension_paths", lambda _cfg: [])
+    monkeypatch.setattr(
+        playwright_shim,
+        "get_config",
+        lambda: normalize_config(
+            {
+                "network_location": {
+                    "proxy": "socks5://proxy.test:1080",
+                    "timezone": "America/Chicago",
+                    "locale": "en-US",
+                }
+            }
+        ),
+    )
+
+    launch_kwargs, _info = playwright_shim.build_launch_overrides({}, persistent=True)
+
+    assert "proxy" not in launch_kwargs
+    assert "--proxy-server=socks5://proxy.test:1080" in launch_kwargs["args"]
+    assert "--fingerprint-webrtc-ip=198.51.100.55" in launch_kwargs["args"]
 
 
 def test_agent_zero_managed_browser_path_is_patched():

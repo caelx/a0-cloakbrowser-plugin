@@ -27,7 +27,9 @@ def test_normalize_config_defaults_and_invalid_values(monkeypatch):
     assert cfg["network_location"]["locale"] == ""
     assert cfg["network_location"]["webrtc_ip_mode"] == "auto"
     assert cfg["identity"]["fingerprint_platform"] == "Windows"
-    assert cfg["extensions"]["update_i_still_dont_care_about_cookies_on_setup"] is True
+    assert cfg["extensions"]["enable_i_still_dont_care_about_cookies"] is False
+    assert "install_i_still_dont_care_about_cookies" not in cfg["extensions"]
+    assert "update_i_still_dont_care_about_cookies_on_setup" not in cfg["extensions"]
     assert cfg["bypass_paywalls_clean"]["opt_in_setcookie"] is True
     assert cfg["bypass_paywalls_clean"]["opt_in_custom_sites"] is True
     assert cfg["bypass_paywalls_clean"]["opt_in_update"] is True
@@ -67,9 +69,17 @@ def test_redacted_config_hides_proxy_credentials():
     assert cfg["network_location"]["proxy"] == "http://<redacted>@example.com:8080"
 
 
-def test_plugin_dir_prefers_materialized_a0_root(monkeypatch, tmp_path):
-    materialized = tmp_path / "a0" / "usr" / "plugins" / "cloakbrowser"
-    materialized.mkdir(parents=True)
-    monkeypatch.setattr(config, "MATERIALIZED_PLUGIN_DIR", materialized)
+def test_plugin_dir_prefers_upstream_plugin_helper(monkeypatch, tmp_path):
+    upstream = tmp_path / "git" / "agent-zero"
+    plugin = upstream / "usr" / "plugins" / "cloakbrowser"
+    plugin.mkdir(parents=True)
+    (upstream / "plugins" / "_browser").mkdir(parents=True)
+    (upstream / "helpers").mkdir()
+    (upstream / "helpers" / "__init__.py").write_text("", encoding="utf-8")
+    (upstream / "helpers" / "plugins.py").write_text(
+        "def find_plugin_dir(name):\n    return " + repr(str(plugin)) + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(config, "AGENT_ZERO_FALLBACK_DIR", upstream)
 
-    assert plugin_dir() == materialized
+    assert plugin_dir() == plugin

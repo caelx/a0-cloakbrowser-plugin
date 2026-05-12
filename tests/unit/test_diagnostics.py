@@ -9,6 +9,7 @@ def test_status_separates_setup_from_process_local_patches(monkeypatch):
             "setup_status": "setup",
             "setup_timestamp": "2026-05-09T00:00:00Z",
             "playwright_shim": {"masquerade_path": "/tmp/chrome"},
+            "runtime_source_patch": {"applied": True, "patch_version": "8"},
         },
     )
     monkeypatch.setattr(diagnostics, "display_usable", lambda display: False)
@@ -33,7 +34,8 @@ def test_status_separates_setup_from_process_local_patches(monkeypatch):
     assert status["environment"]["shared_memory"]["available"] is True
     assert status["patches"]["playwright_shim"]["setup_installed"] is True
     assert status["patches"]["playwright_shim"]["patched"] is False
-    assert status["patches"]["runtime_patch"]["setup_installed"] is False
+    assert status["patches"]["runtime_patch"]["setup_installed"] is True
+    assert status["patches"]["runtime_source_patch"]["patch_version"] == "8"
     assert status["patches"]["arg_filtering"] == "always_on"
 
 
