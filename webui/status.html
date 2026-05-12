@@ -3,9 +3,66 @@
   <title>CloakBrowser Status</title>
 </head>
 <body>
-  <div class="cloakbrowser-status">
-    <p>Use the plugin execute action or run <code>python execute.py status</code> from the plugin directory for full diagnostics.</p>
-    <p>Setup, repair, and uninstall are exposed through <code>/plugins/cloakbrowser/install</code>.</p>
+  <div x-data="cloakbrowserStatus()" x-init="refresh()" class="cloakbrowser-status">
+    <dl>
+      <div><dt>Setup</dt><dd x-text="setup"></dd></div>
+      <div><dt>Timezone</dt><dd x-text="timezone"></dd></div>
+      <div><dt>Locale</dt><dd x-text="locale"></dd></div>
+      <div><dt>Exit IP</dt><dd x-text="exitIp"></dd></div>
+      <div><dt>Extensions</dt><dd x-text="extensions"></dd></div>
+    </dl>
+    <button type="button" @click="refresh()">Refresh</button>
   </div>
+  <script>
+    function cloakbrowserStatus() {
+      return {
+        setup: "Loading",
+        timezone: "Loading",
+        locale: "Loading",
+        exitIp: "Loading",
+        extensions: "Loading",
+        async refresh() {
+          try {
+            const res = await fetch("/api/plugins/cloakbrowser/status");
+            const data = await res.json();
+            const location = data.effective_location || {};
+            const setup = data.setup || {};
+            const activePaths = data.extensions?.active_paths || [];
+            this.setup = `${setup.status || "unknown"}`;
+            this.timezone = location.timezone || "Not recorded";
+            this.locale = location.locale || "Not recorded";
+            this.exitIp = location.exit_ip || "Not recorded";
+            this.extensions = `${activePaths.length} active`;
+          } catch (err) {
+            const message = err?.message || "Request failed";
+            this.setup = message;
+            this.timezone = message;
+            this.locale = message;
+            this.exitIp = message;
+            this.extensions = message;
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    .cloakbrowser-status {
+      display: grid;
+      gap: 12px;
+    }
+    .cloakbrowser-status dl {
+      display: grid;
+      gap: 8px;
+      margin: 0;
+    }
+    .cloakbrowser-status dl > div {
+      display: grid;
+      grid-template-columns: minmax(0, 160px) minmax(0, 1fr);
+      gap: 12px;
+    }
+    .cloakbrowser-status dt {
+      font-weight: 600;
+    }
+  </style>
 </body>
 </html>

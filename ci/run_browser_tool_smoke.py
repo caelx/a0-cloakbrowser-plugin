@@ -13,7 +13,12 @@ from urllib.parse import quote
 async def main() -> int:
     sys.path.insert(0, "/git/agent-zero")
     from plugins._browser.helpers import runtime as browser_runtime
-    from usr.plugins.cloakbrowser.tools.browser import Browser
+    from plugins._browser.tools.browser import Browser
+    from usr.plugins.cloakbrowser.helpers.playwright_shim import patch_playwright
+    from usr.plugins.cloakbrowser.helpers.runtime_patch import apply_runtime_patch
+
+    apply_runtime_patch()
+    patch_playwright()
 
     class Log:
         def log(self, **kwargs):

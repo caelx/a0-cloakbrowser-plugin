@@ -17,7 +17,7 @@ def _status():
     }
 
 
-def test_ensure_agent_zero_path_uses_git_fallback_for_materialized_plugin(monkeypatch, tmp_path):
+def test_ensure_agent_zero_path_uses_git_fallback_for_legacy_plugin_root(monkeypatch, tmp_path):
     root = tmp_path / "a0" / "usr" / "plugins" / "cloakbrowser"
     root.mkdir(parents=True)
     fallback = tmp_path / "git" / "agent-zero"
@@ -108,9 +108,9 @@ def test_execute_run_uninstalls_when_plugin_disabled(monkeypatch, capsys):
                     "uninstall": lambda **kwargs: calls.append(kwargs)
                     or {
                         "ok": True,
-                        "disabled_extension_paths": ["/a0/usr/plugins/_browser/config.json"],
+                        "disabled_extension_paths": ["/git/agent-zero/usr/plugins/cloakbrowser/.cloakbrowser/extensions/ubol"],
                         "masquerade_removed": True,
-                        "restart_required": True,
+                        "restart_required": False,
                     },
                 },
             )

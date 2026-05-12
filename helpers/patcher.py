@@ -14,9 +14,8 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def backup_file(path: Path, backup_root: Path) -> Path:
-    backup_root.mkdir(parents=True, exist_ok=True)
-    stamp = time.strftime("%Y%m%d-%H%M%S")
-    backup = backup_root / f"{path.name}.{stamp}.bak"
+def backup_file(path: Path, backup_dir: Path) -> Path:
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    backup = backup_dir / f"{path.name}.{int(time.time())}.bak"
     shutil.copy2(path, backup)
     return backup

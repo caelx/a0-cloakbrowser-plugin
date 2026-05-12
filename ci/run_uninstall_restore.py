@@ -22,7 +22,7 @@ def main() -> int:
     runtime_profile = Path("/git/agent-zero/tmp/browser/sessions/cloakbrowser-runtime-ci")
     before_config = get_browser_config()
     result = subprocess.run(
-        ["python", str(Path(plugin_dir) / "execute.py"), "uninstall", "--noninteractive", "--json"],
+        [sys.executable, str(Path(plugin_dir) / "execute.py"), "uninstall", "--noninteractive", "--json"],
         check=False,
         capture_output=True,
         text=True,
@@ -43,7 +43,10 @@ def main() -> int:
         "runtime_profile_preserved": runtime_profile.exists(),
         "uninstall_ok": parsed_stdout.get("ok") is True,
         "runtime_patch_unpatched": parsed_stdout.get("runtime_patch", {}).get("patched") is False,
+        "runtime_source_restored": parsed_stdout.get("runtime_source_patch", {}).get("restored")
+        in {True, None},
         "playwright_shim_unpatched": parsed_stdout.get("playwright_shim", {}).get("patched") is False,
+        "restart_not_required": parsed_stdout.get("restart_required") is False,
     }
     if parsed_stdout.get("supervisor", {}).get("removed"):
         assertions["supervisor_config_removed"] = not Path(parsed_stdout["supervisor"]["removed"]).exists()

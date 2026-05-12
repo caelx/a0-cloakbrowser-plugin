@@ -3,13 +3,15 @@ from __future__ import annotations
 import copy
 import json
 import os
+import sys
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
 PLUGIN_NAME = "cloakbrowser"
 PLUGIN_TITLE = "CloakBrowser"
 MANIFEST_NAME = ".cloakbrowser-install-manifest.json"
-MATERIALIZED_PLUGIN_DIR = Path("/a0") / "usr" / "plugins" / PLUGIN_NAME
+AGENT_ZERO_FALLBACK_DIR = Path("/git/agent-zero")
 
 BPC_SOURCE_URL = (
     "https://gitflic.ru/project/magnolia1234/bpc_uploads/blob/raw"
@@ -57,18 +59,11 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "extra_args": [],
         "filter_default_playwright_args": True,
         "disable_shadow_dom_init_patch": True,
-        "patch_runtime_file_if_needed": True,
     },
     "extensions": {
-        "install_ublock_origin_lite": True,
-        "enable_ublock_origin_lite": True,
-        "update_ublock_origin_lite_on_setup": False,
-        "install_i_still_dont_care_about_cookies": True,
-        "enable_i_still_dont_care_about_cookies": True,
-        "update_i_still_dont_care_about_cookies_on_setup": True,
-        "install_bypass_paywalls_clean": False,
+        "enable_ublock_origin_lite": False,
+        "enable_i_still_dont_care_about_cookies": False,
         "enable_bypass_paywalls_clean": False,
-        "update_bypass_paywalls_clean_on_setup": False,
     },
     "ublock_origin_lite": {
         "filtering_mode": "complete",
@@ -101,18 +96,9 @@ DEFAULT_CONFIG: dict[str, Any] = {
 
 def plugin_dir() -> Path:
     local_root = Path(__file__).resolve().parents[1]
-    if local_root == MATERIALIZED_PLUGIN_DIR:
-        return local_root
-    if MATERIALIZED_PLUGIN_DIR.is_dir():
-        return MATERIALIZED_PLUGIN_DIR
-    try:
-        from helpers import plugins
-
-        found = plugins.find_plugin_dir(PLUGIN_NAME)
-        if found:
-            return Path(found)
-    except Exception:
-        pass
+    found = _upstream_plugin_dir(local_root)
+    if found:
+        return found
     return Path(__file__).resolve().parents[1]
 
 
@@ -245,10 +231,18 @@ def normalize_config(raw: dict[str, Any] | None) -> dict[str, Any]:
     adv["filter_default_playwright_args"] = _bool(adv.get("filter_default_playwright_args"), True)
     adv["disable_shadow_dom_init_patch"] = _bool(adv.get("disable_shadow_dom_init_patch"), True)
     adv.pop("preserve_headed_placeholder_page", None)
-    adv["patch_runtime_file_if_needed"] = _bool(adv.get("patch_runtime_file_if_needed"), True)
+    adv.pop("patch_runtime_file_if_needed", None)
 
+    ext = cfg["extensions"]
     for key, default in DEFAULT_CONFIG["extensions"].items():
-        cfg["extensions"][key] = _bool(cfg["extensions"].get(key), bool(default))
+        ext[key] = _bool(ext.get(key), bool(default))
+    for name in (
+        "ublock_origin_lite",
+        "i_still_dont_care_about_cookies",
+        "bypass_paywalls_clean",
+    ):
+        ext.pop(f"install_{name}", None)
+        ext.pop(f"update_{name}_on_setup", None)
 
     ubol = cfg["ublock_origin_lite"]
     ubol["filtering_mode"] = str(ubol.get("filtering_mode") or "complete").strip()
@@ -394,3 +388,66 @@ def _redact_proxy(proxy: str) -> str:
     _, host = rest.rsplit("@", 1)
     prefix = f"{scheme}://" if scheme else ""
     return f"{prefix}<redacted>@{host}"
+
+
+def _upstream_plugin_dir(local_root: Path) -> Path | None:
+    with _without_local_helpers(local_root):
+        for candidate in (*local_root.parents, AGENT_ZERO_FALLBACK_DIR):
+            if (
+                (candidate / "plugins" / "_browser").is_dir()
+                and (candidate / "helpers" / "plugins.py").is_file()
+            ):
+                candidate_str = str(candidate)
+                if candidate_str not in sys.path:
+                    sys.path.insert(0, candidate_str)
+                break
+        try:
+            from helpers import plugins
+
+            found = plugins.find_plugin_dir(PLUGIN_NAME)
+            return Path(found) if found else None
+        except Exception:
+            return None
+
+
+@contextmanager
+def _without_local_helpers(local_root: Path):
+    previous_sys_path = list(sys.path)
+    previous_helpers = {
+        name: module
+        for name, module in sys.modules.items()
+        if name == "helpers" or name.startswith("helpers.")
+    }
+    removed_entries: list[tuple[int, str]] = []
+    removed_modules: dict[str, object] = {}
+    for name, module in list(sys.modules.items()):
+        if name != "helpers" and not name.startswith("helpers."):
+            continue
+        module_file = Path(getattr(module, "__file__", "") or "")
+        if not module_file:
+            continue
+        try:
+            if not module_file.resolve().is_relative_to(local_root):
+                continue
+        except Exception:
+            continue
+        removed_modules[name] = module
+        sys.modules.pop(name, None)
+
+    for index, entry in reversed(list(enumerate(sys.path))):
+        try:
+            matches_root = Path(entry or ".").resolve() == local_root
+        except Exception:
+            matches_root = False
+        if entry == str(local_root) or matches_root:
+            removed_entries.append((index, entry))
+            sys.path.pop(index)
+
+    try:
+        yield
+    finally:
+        sys.path[:] = previous_sys_path
+        for name in list(sys.modules):
+            if name == "helpers" or name.startswith("helpers."):
+                sys.modules.pop(name, None)
+        sys.modules.update(previous_helpers)

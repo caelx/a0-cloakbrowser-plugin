@@ -15,8 +15,8 @@ def uninstall(*, remove_extensions: bool = False) -> dict:
     manifest = load_manifest()
     disabled_paths = disable_managed_extension_paths()
     runtime = unpatch_runtime()
-    source_runtime = restore_runtime_source_patch(manifest)
     shim = unpatch_playwright()
+    source_patch = restore_runtime_source_patch(manifest)
     masquerade_removed = remove_masquerade(
         manifest.get("playwright_shim", {}).get("masquerade_path") or None
     )
@@ -29,16 +29,18 @@ def uninstall(*, remove_extensions: bool = False) -> dict:
                 shutil.rmtree(path)
                 removed_extensions.append(str(path))
     manifest["setup_status"] = "uninstalled"
+    manifest["runtime_source_restore"] = source_patch
     save_manifest(manifest)
+    ok = source_patch.get("restored") is True or source_patch.get("reason") == "not_patched"
     return {
-        "ok": True,
+        "ok": ok,
         "disabled_extension_paths": disabled_paths,
         "runtime_patch": runtime,
-        "runtime_source_patch": source_runtime,
+        "runtime_source_patch": source_patch,
         "playwright_shim": shim,
         "masquerade_removed": masquerade_removed,
         "supervisor": supervisor,
         "direct_xvfb": direct_xvfb,
         "removed_extensions": removed_extensions,
-        "restart_required": True,
+        "restart_required": False,
     }

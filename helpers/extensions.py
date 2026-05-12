@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import shutil
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -52,9 +53,7 @@ def install_configured_extensions(
     installed: list[str] = []
     actions: list[dict[str, Any]] = []
 
-    if ext["install_ublock_origin_lite"] and (
-        ext["update_ublock_origin_lite_on_setup"] or not _is_loadable(paths["ublock_origin_lite"])
-    ):
+    if ext["enable_ublock_origin_lite"]:
         action = "updated" if _is_loadable(paths["ublock_origin_lite"]) else "installed"
         meta = install_ublock_origin_lite(paths["ublock_origin_lite"], cfg["ublock_origin_lite"])
         record_extension(manifest, "ublock_origin_lite", meta)
@@ -76,10 +75,7 @@ def install_configured_extensions(
             _extension_action("ublock_origin_lite", paths["ublock_origin_lite"], "skipped", cfg)
         )
 
-    if ext["install_i_still_dont_care_about_cookies"] and (
-        ext["update_i_still_dont_care_about_cookies_on_setup"]
-        or not _is_loadable(paths["i_still_dont_care_about_cookies"])
-    ):
+    if ext["enable_i_still_dont_care_about_cookies"]:
         action = (
             "updated" if _is_loadable(paths["i_still_dont_care_about_cookies"]) else "installed"
         )
@@ -121,10 +117,7 @@ def install_configured_extensions(
             )
         )
 
-    if ext["install_bypass_paywalls_clean"] and (
-        ext["update_bypass_paywalls_clean_on_setup"]
-        or not _is_loadable(paths["bypass_paywalls_clean"])
-    ):
+    if ext["enable_bypass_paywalls_clean"]:
         action = "updated" if _is_loadable(paths["bypass_paywalls_clean"]) else "installed"
         meta = install_bypass_paywalls_clean(
             paths["bypass_paywalls_clean"], config=cfg["bypass_paywalls_clean"]
@@ -160,29 +153,25 @@ def install_configured_extensions(
 
 def sync_browser_extension_paths(config: dict[str, Any] | None = None) -> list[str]:
     active = active_extension_paths(config)
-    try:
-        plugins, get_browser_config = _agent_zero_browser_config_helpers()
-
+    with _agent_zero_browser_config_context() as (plugins, get_browser_config):
         browser_config = get_browser_config()
         current_paths = [
             str(Path(path).expanduser()) for path in browser_config.get("extension_paths", [])
         ]
         managed = managed_extension_paths()
-        preserved = [path for path in current_paths if not _is_managed_extension_path(path, managed)]
+        preserved = [
+            path for path in current_paths if not _is_managed_extension_path(path, managed)
+        ]
         browser_config["extension_paths"] = _dedupe_paths(
             preserved + [path for path in active if path not in preserved]
         )
         plugins.save_plugin_config("_browser", "", "", browser_config)
-    except Exception:
-        pass
     return active
 
 
 def disable_managed_extension_paths() -> list[str]:
     removed: list[str] = []
-    try:
-        plugins, get_browser_config = _agent_zero_browser_config_helpers()
-
+    with _agent_zero_browser_config_context() as (plugins, get_browser_config):
         managed = managed_extension_paths()
         browser_config = get_browser_config()
         paths = []
@@ -194,19 +183,22 @@ def disable_managed_extension_paths() -> list[str]:
             paths.append(path)
         browser_config["extension_paths"] = paths
         plugins.save_plugin_config("_browser", "", "", browser_config)
-    except Exception:
-        pass
     return removed
 
 
-def _agent_zero_browser_config_helpers():
+@contextmanager
+def _agent_zero_browser_config_context():
     from .runtime_patch import _agent_zero_import_context
 
     with _agent_zero_import_context():
-        from helpers import plugins
-        from plugins._browser.helpers.config import get_browser_config
+        yield _browser_config_helpers()
 
-        return plugins, get_browser_config
+
+def _browser_config_helpers():
+    from helpers import plugins
+    from plugins._browser.helpers.config import get_browser_config
+
+    return plugins, get_browser_config
 
 
 def list_extension_status(config: dict[str, Any] | None = None) -> list[dict[str, Any]]:

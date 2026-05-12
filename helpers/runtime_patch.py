@@ -80,6 +80,12 @@ def _agent_zero_import_context():
     from .config import plugin_dir
 
     root = plugin_dir().resolve()
+    previous_sys_path = list(sys.path)
+    previous_helpers = {
+        name: module
+        for name, module in sys.modules.items()
+        if name == "helpers" or name.startswith("helpers.")
+    }
     removed_entries: list[tuple[int, str]] = []
     removed_modules: dict[str, Any] = {}
     for name, module in list(sys.modules.items()):
@@ -118,7 +124,8 @@ def _agent_zero_import_context():
     try:
         yield
     finally:
-        for index, entry in sorted(removed_entries):
-            sys.path.insert(min(index, len(sys.path)), entry)
-        for name, module in removed_modules.items():
-            sys.modules.setdefault(name, module)
+        sys.path[:] = previous_sys_path
+        for name in list(sys.modules):
+            if name == "helpers" or name.startswith("helpers."):
+                sys.modules.pop(name, None)
+        sys.modules.update(previous_helpers)
