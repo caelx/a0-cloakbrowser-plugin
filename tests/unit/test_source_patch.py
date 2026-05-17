@@ -13,7 +13,7 @@ def test_patch_runtime_source_applies_v8_without_legacy_plugin_root(monkeypatch,
 
     text = runtime.read_text(encoding="utf-8")
     assert result["applied"] is True
-    assert result["patch_version"] == "8"
+    assert result["patch_version"] == "9"
     assert source_patch.PATCH_MARKER in text
     assert 'find_plugin_dir("cloakbrowser")' in text
     assert "/a0/usr/plugins/cloakbrowser" not in text
@@ -90,11 +90,34 @@ def test_patch_runtime_source_supports_current_agent_zero_runtime(monkeypatch, t
     text = runtime.read_text(encoding="utf-8")
     assert result["applied"] is True
     assert source_patch.PATCH_MARKER in text
-    assert source_patch.CONTENT_HELPER_ORIGINAL in text
+    assert source_patch.CONTENT_HELPER_PATCHED in text
     assert "self._ensure_can_open_page()" in text
     assert "Browser context could not open a new tab; restarting." in text
     assert "_cloakbrowser_open_restart_lock" in text
     assert "_cloakbrowser_expected_context_close" in text
+
+
+def test_patch_runtime_source_upgrades_v8_content_helper_guard(monkeypatch, tmp_path):
+    runtime = tmp_path / "runtime.py"
+    v8_source = (
+        source_patch.patch_runtime_source_text(_current_runtime_source())
+        .replace(source_patch.PATCH_MARKER, "CLOAKBROWSER_SOURCE_PATCH_V8")
+        .replace(source_patch.CONTENT_HELPER_PATCHED, source_patch.CONTENT_HELPER_ORIGINAL)
+    )
+    runtime.write_text(
+        v8_source,
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(source_patch, "browser_runtime_source_path", lambda: runtime)
+    manifest = {}
+
+    result = source_patch.patch_runtime_source(manifest)
+
+    text = runtime.read_text(encoding="utf-8")
+    assert result["upgraded"] is True
+    assert source_patch.PATCH_MARKER in text
+    assert "CLOAKBROWSER_SOURCE_PATCH_V8" not in text
+    assert source_patch.CONTENT_HELPER_PATCHED in text
 
 
 def _old_runtime_source() -> str:
