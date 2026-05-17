@@ -5,7 +5,7 @@ from helpers import source_patch
 
 def test_patch_runtime_source_applies_v8_without_legacy_plugin_root(monkeypatch, tmp_path):
     runtime = tmp_path / "runtime.py"
-    runtime.write_text(_runtime_source(), encoding="utf-8")
+    runtime.write_text(_old_runtime_source(), encoding="utf-8")
     monkeypatch.setattr(source_patch, "browser_runtime_source_path", lambda: runtime)
     manifest = {}
 
@@ -33,7 +33,7 @@ def test_patch_runtime_source_applies_v8_without_legacy_plugin_root(monkeypatch,
 def test_patch_runtime_source_upgrades_old_marker_and_helper(monkeypatch, tmp_path):
     runtime = tmp_path / "runtime.py"
     runtime.write_text(
-        _runtime_source().replace(
+        _old_runtime_source().replace(
             'CONTENT_HELPER_PATH = PLUGIN_DIR / "assets" / "browser-page-content.js"\n',
             """
 # CLOAKBROWSER_SOURCE_PATCH_V7: start
@@ -59,7 +59,7 @@ def _cloakbrowser_source_runtime():
 
 def test_restore_runtime_source_patch_requires_matching_hash(monkeypatch, tmp_path):
     runtime = tmp_path / "runtime.py"
-    original = _runtime_source()
+    original = _old_runtime_source()
     runtime.write_text(original, encoding="utf-8")
     monkeypatch.setattr(source_patch, "browser_runtime_source_path", lambda: runtime)
     manifest = {}
@@ -79,7 +79,25 @@ def test_restore_runtime_source_patch_requires_matching_hash(monkeypatch, tmp_pa
     assert runtime.read_text(encoding="utf-8") == original
 
 
-def _runtime_source() -> str:
+def test_patch_runtime_source_supports_current_agent_zero_runtime(monkeypatch, tmp_path):
+    runtime = tmp_path / "runtime.py"
+    runtime.write_text(_current_runtime_source(), encoding="utf-8")
+    monkeypatch.setattr(source_patch, "browser_runtime_source_path", lambda: runtime)
+    manifest = {}
+
+    result = source_patch.patch_runtime_source(manifest)
+
+    text = runtime.read_text(encoding="utf-8")
+    assert result["applied"] is True
+    assert source_patch.PATCH_MARKER in text
+    assert source_patch.CONTENT_HELPER_ORIGINAL in text
+    assert "self._ensure_can_open_page()" in text
+    assert "Browser context could not open a new tab; restarting." in text
+    assert "_cloakbrowser_open_restart_lock" in text
+    assert "_cloakbrowser_expected_context_close" in text
+
+
+def _old_runtime_source() -> str:
     return f"""
 from __future__ import annotations
 
@@ -94,6 +112,32 @@ class _BrowserRuntimeCore:
 {source_patch.START_PAGES_ORIGINAL}
 {source_patch.OPEN_ORIGINAL}
         await self._settle(page)
+        return {{"id": browser_page.id, "state": await self._state(browser_page.id)}}
+
+{source_patch.CLOSE_BROWSER_ORIGINAL}
+{source_patch.CLOSE_ALL_ORIGINAL}
+{source_patch.CONTEXT_CLOSED_ORIGINAL}
+{source_patch.STOP_PLAYWRIGHT_ORIGINAL}
+"""
+
+
+def _current_runtime_source() -> str:
+    return f"""
+from __future__ import annotations
+
+import asyncio
+
+CONTENT_HELPER_PATH = PLUGIN_DIR / "assets" / "browser-page-content.js"
+
+
+class _BrowserRuntimeCore:
+{source_patch.LAUNCH_ORIGINAL}
+{source_patch.CONTENT_HELPER_ORIGINAL}
+{source_patch.START_PAGES_ORIGINAL}
+{source_patch.OPEN_ORIGINAL_WITH_LIMIT}
+        self.last_interacted_browser_id = browser_page.id
+        if url:
+            await self._goto(browser_page, url)
         return {{"id": browser_page.id, "state": await self._state(browser_page.id)}}
 
 {source_patch.CLOSE_BROWSER_ORIGINAL}

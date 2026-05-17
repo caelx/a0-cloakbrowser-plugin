@@ -144,6 +144,36 @@ def test_shadow_dom_script_is_noop_and_restored(monkeypatch):
     assert FakeRuntimeCore._shadow_dom_script() == "original"
 
 
+def test_shadow_dom_patch_tolerates_current_runtime_without_helper(monkeypatch):
+    class CurrentRuntimeCore:
+        pass
+
+    runtime_mod = types.ModuleType("plugins._browser.helpers.runtime")
+    runtime_mod._BrowserRuntimeCore = CurrentRuntimeCore
+    monkeypatch.setitem(sys.modules, "plugins", types.ModuleType("plugins"))
+    monkeypatch.setitem(sys.modules, "plugins._browser", types.ModuleType("plugins._browser"))
+    monkeypatch.setitem(sys.modules, "plugins._browser.helpers", types.ModuleType("plugins._browser.helpers"))
+    monkeypatch.setitem(sys.modules, "plugins._browser.helpers.runtime", runtime_mod)
+    monkeypatch.setattr(runtime_patch, "_agent_zero_import_context", lambda: _NullContext())
+    monkeypatch.setattr(
+        "helpers.config.get_config",
+        lambda: {
+            "advanced": {
+                "disable_shadow_dom_init_patch": True,
+            },
+            "runtime": {"headed": True},
+        },
+    )
+
+    runtime_patch.unpatch_runtime()
+    status = runtime_patch.apply_runtime_patch()
+
+    assert status["patched"] is True
+    assert status["shadow_dom_disabled"] is False
+    assert not hasattr(CurrentRuntimeCore, "_shadow_dom_script")
+    runtime_patch.unpatch_runtime()
+
+
 def test_headed_close_all_delegates_upstream(monkeypatch):
     install_fake_runtime(monkeypatch)
     monkeypatch.setattr(runtime_patch, "_agent_zero_import_context", lambda: _NullContext())

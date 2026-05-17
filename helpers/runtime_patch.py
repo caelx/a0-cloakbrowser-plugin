@@ -30,9 +30,13 @@ def apply_runtime_patch() -> dict[str, Any]:
     cfg = get_config()
     core = runtime._BrowserRuntimeCore
     if cfg["advanced"]["disable_shadow_dom_init_patch"]:
-        _STATE["original_shadow_dom_script"] = core._shadow_dom_script
-        core._shadow_dom_script = staticmethod(_empty_shadow_dom_script)
-        _STATE["shadow_dom_disabled"] = True
+        original_shadow_dom_script = getattr(core, "_shadow_dom_script", None)
+        _STATE["original_shadow_dom_script"] = original_shadow_dom_script
+        if original_shadow_dom_script is not None:
+            core._shadow_dom_script = staticmethod(_empty_shadow_dom_script)
+            _STATE["shadow_dom_disabled"] = True
+        else:
+            _STATE["shadow_dom_disabled"] = False
     else:
         _STATE["original_shadow_dom_script"] = None
         _STATE["shadow_dom_disabled"] = False
