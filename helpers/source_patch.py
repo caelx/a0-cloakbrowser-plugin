@@ -8,8 +8,8 @@ from typing import Any
 
 from .patcher import backup_file, sha256_file
 
-PATCH_VERSION = "8"
-PATCH_MARKER = "CLOAKBROWSER_SOURCE_PATCH_V8"
+PATCH_VERSION = "9"
+PATCH_MARKER = "CLOAKBROWSER_SOURCE_PATCH_V9"
 OLD_PATCH_MARKERS = (
     "CLOAKBROWSER_SOURCE_PATCH_V1",
     "CLOAKBROWSER_SOURCE_PATCH_V2",
@@ -18,6 +18,7 @@ OLD_PATCH_MARKERS = (
     "CLOAKBROWSER_SOURCE_PATCH_V5",
     "CLOAKBROWSER_SOURCE_PATCH_V6",
     "CLOAKBROWSER_SOURCE_PATCH_V7",
+    "CLOAKBROWSER_SOURCE_PATCH_V8",
 )
 
 SOURCE_RUNTIME_HELPER = f"""
@@ -95,6 +96,10 @@ SHADOW_PATCHED = """        if not (_cloakbrowser_runtime and _cloakbrowser_runt
 """
 
 CONTENT_HELPER_ORIGINAL = """        await self.context.add_init_script(path=str(CONTENT_HELPER_PATH))
+"""
+
+CONTENT_HELPER_PATCHED = """        if not (_cloakbrowser_runtime and _cloakbrowser_runtime.disable_shadow_dom_init()):
+            await self.context.add_init_script(path=str(CONTENT_HELPER_PATH))
 """
 
 START_PAGES_ORIGINAL = """        for page in list(self.context.pages):
@@ -500,7 +505,7 @@ def patch_runtime_source_text(text: str) -> str:
         patched,
         (
             (SHADOW_ORIGINAL, SHADOW_PATCHED),
-            (CONTENT_HELPER_ORIGINAL, CONTENT_HELPER_ORIGINAL),
+            (CONTENT_HELPER_ORIGINAL, CONTENT_HELPER_PATCHED),
         ),
     )
     patched = _replace_once(patched, START_PAGES_ORIGINAL, START_PAGES_PATCHED)
@@ -533,7 +538,8 @@ def upgrade_runtime_source_text(text: str) -> str:
         (
             (SHADOW_PATCHED, SHADOW_PATCHED),
             (SHADOW_ORIGINAL, SHADOW_PATCHED),
-            (CONTENT_HELPER_ORIGINAL, CONTENT_HELPER_ORIGINAL),
+            (CONTENT_HELPER_PATCHED, CONTENT_HELPER_PATCHED),
+            (CONTENT_HELPER_ORIGINAL, CONTENT_HELPER_PATCHED),
         ),
     )
     if START_PAGES_PATCHED in patched:
