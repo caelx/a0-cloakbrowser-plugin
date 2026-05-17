@@ -6,8 +6,36 @@ import json
 import re
 import sys
 from pathlib import Path
-from types import SimpleNamespace
 from urllib.parse import quote
+
+
+class FakeContext:
+    def __init__(self, context_id: str):
+        self.id = context_id
+        self.log = Log()
+        self._data: dict[str, object] = {}
+
+    def get_data(self, key: str, default=None):
+        return self._data.get(key, default)
+
+    def set_data(self, key: str, value) -> None:
+        self._data[key] = value
+
+
+class FakeAgent:
+    def __init__(self, context_id: str):
+        self.context = FakeContext(context_id)
+        self.config = FakeConfig()
+        self.agent_name = "CI"
+
+
+class FakeConfig:
+    profile = "default"
+
+
+class Log:
+    def log(self, **kwargs):
+        return kwargs
 
 
 async def main() -> int:
@@ -20,13 +48,7 @@ async def main() -> int:
     apply_runtime_patch()
     patch_playwright()
 
-    class Log:
-        def log(self, **kwargs):
-            return kwargs
-
-    agent = SimpleNamespace(
-        context=SimpleNamespace(id="cloakbrowser-ci", log=Log()), agent_name="CI"
-    )
+    agent = FakeAgent("cloakbrowser-ci")
     tool = Browser(agent=agent, name="browser", method=None, args={}, message="", loop_data=None)
     results = []
     upload = Path("/tmp/cloakbrowser-upload.txt")
