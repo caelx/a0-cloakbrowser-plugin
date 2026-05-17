@@ -94,6 +94,9 @@ SHADOW_PATCHED = """        if not (_cloakbrowser_runtime and _cloakbrowser_runt
             await self.context.add_init_script(self._shadow_dom_script())
 """
 
+CONTENT_HELPER_ORIGINAL = """        await self.context.add_init_script(path=str(CONTENT_HELPER_PATH))
+"""
+
 START_PAGES_ORIGINAL = """        for page in list(self.context.pages):
             if page.url == "about:blank":
                 try:
@@ -118,6 +121,13 @@ START_PAGES_PATCHED = """        for page in list(self.context.pages):
 
 OPEN_ORIGINAL = """    async def open(self, url: str = "") -> dict[str, Any]:
         await self.ensure_started()
+        page = await self.context.new_page()
+        browser_page = await self._register_page(page)
+"""
+
+OPEN_ORIGINAL_WITH_LIMIT = """    async def open(self, url: str = "") -> dict[str, Any]:
+        await self.ensure_started()
+        self._ensure_can_open_page()
         page = await self.context.new_page()
         browser_page = await self._register_page(page)
 """
@@ -155,6 +165,51 @@ OPEN_PATCHED = """    async def open(self, url: str = "") -> dict[str, Any]:
                                 raise
                             await self._discard_stale_context("Browser context could not open a new tab; restarting.")
                             await self.ensure_started()
+                            for candidate in list(getattr(self.context, "pages", [])):
+                                if not getattr(candidate, "is_closed", lambda: False)():
+                                    page = candidate
+                                    break
+                            if page is None:
+                                page = await self.context.new_page()
+        browser_page = await self._register_page(page)
+"""
+
+OPEN_PATCHED_WITH_LIMIT = """    async def open(self, url: str = "") -> dict[str, Any]:
+        await self.ensure_started()
+        self._ensure_can_open_page()
+        page = None
+        if not self.pages:
+            for candidate in list(getattr(self.context, "pages", [])):
+                if not getattr(candidate, "is_closed", lambda: False)():
+                    page = candidate
+                    break
+        if page is None:
+            try:
+                page = await self.context.new_page()
+            except Exception:
+                if self.pages:
+                    raise
+                lock = getattr(self, "_cloakbrowser_open_restart_lock", None)
+                if lock is None:
+                    lock = asyncio.Lock()
+                    self._cloakbrowser_open_restart_lock = lock
+                async with lock:
+                    await self.ensure_started()
+                    self._ensure_can_open_page()
+                    if not self.pages:
+                        for candidate in list(getattr(self.context, "pages", [])):
+                            if not getattr(candidate, "is_closed", lambda: False)():
+                                page = candidate
+                                break
+                    if page is None:
+                        try:
+                            page = await self.context.new_page()
+                        except Exception:
+                            if self.pages:
+                                raise
+                            await self._discard_stale_context("Browser context could not open a new tab; restarting.")
+                            await self.ensure_started()
+                            self._ensure_can_open_page()
                             for candidate in list(getattr(self.context, "pages", [])):
                                 if not getattr(candidate, "is_closed", lambda: False)():
                                     page = candidate
@@ -441,9 +496,21 @@ def browser_runtime_source_path() -> Path:
 def patch_runtime_source_text(text: str) -> str:
     patched = _ensure_helper_block(text)
     patched = _replace_once(patched, LAUNCH_ORIGINAL, LAUNCH_PATCHED)
-    patched = _replace_once(patched, SHADOW_ORIGINAL, SHADOW_PATCHED)
+    patched = _replace_first_matching_pair_once(
+        patched,
+        (
+            (SHADOW_ORIGINAL, SHADOW_PATCHED),
+            (CONTENT_HELPER_ORIGINAL, CONTENT_HELPER_ORIGINAL),
+        ),
+    )
     patched = _replace_once(patched, START_PAGES_ORIGINAL, START_PAGES_PATCHED)
-    patched = _replace_once(patched, OPEN_ORIGINAL, OPEN_PATCHED)
+    patched = _replace_first_matching_pair_once(
+        patched,
+        (
+            (OPEN_ORIGINAL_WITH_LIMIT, OPEN_PATCHED_WITH_LIMIT),
+            (OPEN_ORIGINAL, OPEN_PATCHED),
+        ),
+    )
     patched = _replace_once(patched, CLOSE_BROWSER_ORIGINAL, CLOSE_BROWSER_PATCHED)
     patched = _replace_once(patched, CLOSE_ALL_ORIGINAL, CLOSE_ALL_PATCHED)
     patched = _replace_once(patched, CONTEXT_CLOSED_ORIGINAL, CONTEXT_CLOSED_PATCHED)
@@ -461,10 +528,13 @@ def upgrade_runtime_source_text(text: str) -> str:
         (LAUNCH_PATCHED, LAUNCH_ORIGINAL),
         LAUNCH_PATCHED,
     )
-    patched = _replace_first_matching_once(
+    patched = _replace_first_matching_pair_once(
         patched,
-        (SHADOW_PATCHED, SHADOW_ORIGINAL),
-        SHADOW_PATCHED,
+        (
+            (SHADOW_PATCHED, SHADOW_PATCHED),
+            (SHADOW_ORIGINAL, SHADOW_PATCHED),
+            (CONTENT_HELPER_ORIGINAL, CONTENT_HELPER_ORIGINAL),
+        ),
     )
     if START_PAGES_PATCHED in patched:
         pass
@@ -472,10 +542,16 @@ def upgrade_runtime_source_text(text: str) -> str:
         patched = _replace_once(patched, START_PAGES_PATCHED_V1, START_PAGES_PATCHED)
     else:
         patched = _replace_once(patched, START_PAGES_ORIGINAL, START_PAGES_PATCHED)
-    patched = _replace_first_matching_once(
+    patched = _replace_first_matching_pair_once(
         patched,
-        (OPEN_PATCHED, OPEN_PATCHED_V2, OPEN_PATCHED_V1, OPEN_ORIGINAL),
-        OPEN_PATCHED,
+        (
+            (OPEN_PATCHED_WITH_LIMIT, OPEN_PATCHED_WITH_LIMIT),
+            (OPEN_ORIGINAL_WITH_LIMIT, OPEN_PATCHED_WITH_LIMIT),
+            (OPEN_PATCHED, OPEN_PATCHED),
+            (OPEN_PATCHED_V2, OPEN_PATCHED),
+            (OPEN_PATCHED_V1, OPEN_PATCHED),
+            (OPEN_ORIGINAL, OPEN_PATCHED),
+        ),
     )
     patched = _replace_first_matching_once(
         patched,
@@ -529,6 +605,13 @@ def _replace_once(text: str, old: str, new: str) -> str:
 
 def _replace_first_matching_once(text: str, candidates: tuple[str, ...], new: str) -> str:
     for old in candidates:
+        if old in text:
+            return _replace_once(text, old, new)
+    raise ValueError("Expected one runtime source patch target, found 0")
+
+
+def _replace_first_matching_pair_once(text: str, replacements: tuple[tuple[str, str], ...]) -> str:
+    for old, new in replacements:
         if old in text:
             return _replace_once(text, old, new)
     raise ValueError("Expected one runtime source patch target, found 0")
