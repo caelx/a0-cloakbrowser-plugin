@@ -96,6 +96,56 @@ def test_execute_json_mode_is_machine_readable(monkeypatch, capsys):
 
     assert payload["ok"] is True
     assert payload["command"] == "run"
+    assert payload["desired_state"] == "enabled"
+
+
+def test_execute_reconcile_alias_runs_setup(monkeypatch, capsys):
+    calls = []
+
+    def fake_import(name):
+        if name == "helpers.setup":
+            return type(
+                "Setup",
+                (),
+                {"setup_plugin": lambda **kwargs: calls.append(kwargs) or {"ok": True}},
+            )
+        if name == "helpers.diagnostics":
+            return type("Diagnostics", (), {"collect_status": _status})
+        raise AssertionError(name)
+
+    monkeypatch.setattr(plugin_imports, "plugin_import", fake_import)
+    monkeypatch.setattr(execute, "_is_plugin_enabled", lambda: True)
+
+    assert execute.main(["reconcile", "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert calls == [{"noninteractive": False, "skip_system_deps": False}]
+    assert payload["command"] == "reconcile"
+    assert payload["desired_state"] == "enabled"
+
+
+def test_execute_install_alias_runs_setup(monkeypatch, capsys):
+    calls = []
+
+    def fake_import(name):
+        if name == "helpers.setup":
+            return type(
+                "Setup",
+                (),
+                {"setup_plugin": lambda **kwargs: calls.append(kwargs) or {"ok": True}},
+            )
+        if name == "helpers.diagnostics":
+            return type("Diagnostics", (), {"collect_status": _status})
+        raise AssertionError(name)
+
+    monkeypatch.setattr(plugin_imports, "plugin_import", fake_import)
+    monkeypatch.setattr(execute, "_is_plugin_enabled", lambda: True)
+
+    assert execute.main(["install", "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert calls == [{"noninteractive": False, "skip_system_deps": False}]
+    assert payload["command"] == "install"
 
 
 def test_execute_run_uninstalls_when_plugin_disabled(monkeypatch, capsys):
@@ -125,6 +175,40 @@ def test_execute_run_uninstalls_when_plugin_disabled(monkeypatch, capsys):
 
     assert calls == [{"remove_extensions": False}]
     assert "CloakBrowser uninstall" in capsys.readouterr().out
+
+
+def test_execute_status_json_includes_toggle_state(monkeypatch, capsys):
+    monkeypatch.setattr(
+        plugin_imports,
+        "plugin_import",
+        lambda name: type("Diagnostics", (), {"collect_status": _status}),
+    )
+    monkeypatch.setattr(execute, "_is_plugin_enabled", lambda: False)
+
+    assert execute.main(["status", "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["desired_state"] == "disabled"
+    assert payload["toggle_state"] == "disabled"
+
+
+def test_execute_enable_toggles_agent_zero_state(monkeypatch, capsys):
+    toggles = []
+
+    monkeypatch.setattr(
+        plugin_imports,
+        "plugin_import",
+        lambda name: type("Diagnostics", (), {"collect_status": _status}),
+    )
+    monkeypatch.setattr(execute, "_set_plugin_enabled", lambda enabled: toggles.append(enabled))
+    monkeypatch.setattr(execute, "_is_plugin_enabled", lambda: True)
+
+    assert execute.main(["enable", "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert toggles == [True]
+    assert payload["command"] == "enable"
+    assert payload["desired_state"] == "enabled"
 
 
 def test_execute_run_force_sets_up_even_when_plugin_disabled(monkeypatch, capsys):

@@ -11,9 +11,28 @@ from pathlib import Path
 from typing import Any
 
 
+PLUGIN_NAME = "cloakbrowser"
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="CloakBrowser Agent Zero plugin maintenance")
-    parser.add_argument("command", nargs="?", default="run", choices=["run", "setup", "status", "repair", "uninstall"])
+    parser.add_argument(
+        "command",
+        nargs="?",
+        default="run",
+        choices=[
+            "run",
+            "reconcile",
+            "install",
+            "setup",
+            "update",
+            "status",
+            "repair",
+            "enable",
+            "disable",
+            "uninstall",
+        ],
+    )
     parser.add_argument("--noninteractive", action="store_true")
     parser.add_argument("--skip-system-deps", action="store_true")
     parser.add_argument("--remove-extensions", action="store_true")
@@ -27,9 +46,26 @@ def main(argv: list[str] | None = None) -> int:
         collect_status = plugin_import("helpers.diagnostics").collect_status
 
         status = collect_status()
+        if args.json:
+            status.update(_lifecycle_state())
         _print_result(status if args.json else format_status(status))
         return 0
-    if args.command == "run" and not args.force and not _is_plugin_enabled():
+    if args.command in {"enable", "disable"}:
+        from plugin_imports import plugin_import
+
+        collect_status = plugin_import("helpers.diagnostics").collect_status
+
+        _set_plugin_enabled(args.command == "enable")
+        status = collect_status()
+        payload = {
+            "ok": True,
+            "command": args.command,
+            "status": status,
+            **_lifecycle_state(),
+        }
+        _print_result(json.dumps(payload, indent=2, sort_keys=True) if args.json else format_lifecycle(payload))
+        return 0
+    if args.command in {"run", "reconcile"} and not args.force and not _is_plugin_enabled():
         from plugin_imports import plugin_import
 
         uninstall = plugin_import("helpers.uninstall").uninstall
@@ -40,10 +76,11 @@ def main(argv: list[str] | None = None) -> int:
             "command": args.command,
             "disabled": True,
             "uninstall": result,
+            **_lifecycle_state(),
         }
         _print_result(json.dumps(payload, indent=2, sort_keys=True) if args.json else format_uninstall(result))
         return 0 if result.get("ok") else 1
-    if args.command in {"run", "setup", "repair"}:
+    if args.command in {"run", "reconcile", "install", "setup", "update", "repair"}:
         from plugin_imports import plugin_import
 
         collect_status = plugin_import("helpers.diagnostics").collect_status
@@ -66,6 +103,7 @@ def main(argv: list[str] | None = None) -> int:
             "setup": result,
             "status": status,
             "readiness": setup_readiness(status),
+            **_lifecycle_state(),
         }
         _print_result(json.dumps(payload, indent=2, sort_keys=True) if args.json else format_setup(payload))
         return 0 if payload["ok"] else 1
@@ -109,18 +147,38 @@ def _is_plugin_enabled() -> bool:
     if enabled is None:
         return True
     for item in enabled:
-        if item == "cloakbrowser":
+        if item == PLUGIN_NAME:
             return True
         if isinstance(item, dict):
             name = item.get("name") or item.get("id") or item.get("plugin_name")
-            if name == "cloakbrowser":
+            if name == PLUGIN_NAME:
                 return True
         else:
             name = getattr(item, "name", None) or getattr(item, "id", None)
-            if name == "cloakbrowser":
+            if name == PLUGIN_NAME:
                 return True
 
     return False
+
+
+def _set_plugin_enabled(enabled: bool) -> None:
+    root = Path(__file__).resolve().parent
+    from plugin_imports import ensure_agent_zero_path
+
+    ensure_agent_zero_path(root)
+    with _without_local_helpers(root):
+        from helpers import plugins
+
+        plugins.toggle_plugin(PLUGIN_NAME, enabled)
+
+
+def _lifecycle_state() -> dict[str, Any]:
+    enabled = _is_plugin_enabled()
+    return {
+        "enabled": enabled,
+        "toggle_state": "enabled" if enabled else "disabled",
+        "desired_state": "enabled" if enabled else "disabled",
+    }
 
 
 @contextmanager
@@ -219,6 +277,19 @@ def format_uninstall(result: dict[str, Any]) -> str:
     if result.get("removed_extensions"):
         lines.append(f"Removed extension directories: {len(result['removed_extensions'])}")
     return "\n".join(lines)
+
+
+def format_lifecycle(payload: dict[str, Any]) -> str:
+    status = payload.get("status", {})
+    return "\n".join(
+        [
+            "CloakBrowser lifecycle",
+            f"Command: {payload.get('command', 'unknown')}",
+            f"Toggle: {payload.get('toggle_state', 'unknown')}",
+            "",
+            format_status(status),
+        ]
+    )
 
 
 def _format_system_dependencies(system: dict[str, Any]) -> str:
