@@ -1,6 +1,8 @@
 import json
 import sys
+import tomllib
 import types
+from pathlib import Path
 
 import execute
 import plugin_imports
@@ -94,6 +96,56 @@ def test_execute_json_mode_is_machine_readable(monkeypatch, capsys):
 
     assert payload["ok"] is True
     assert payload["command"] == "run"
+    assert payload["desired_state"] == "enabled"
+
+
+def test_execute_reconcile_alias_runs_setup(monkeypatch, capsys):
+    calls = []
+
+    def fake_import(name):
+        if name == "helpers.setup":
+            return type(
+                "Setup",
+                (),
+                {"setup_plugin": lambda **kwargs: calls.append(kwargs) or {"ok": True}},
+            )
+        if name == "helpers.diagnostics":
+            return type("Diagnostics", (), {"collect_status": _status})
+        raise AssertionError(name)
+
+    monkeypatch.setattr(plugin_imports, "plugin_import", fake_import)
+    monkeypatch.setattr(execute, "_is_plugin_enabled", lambda: True)
+
+    assert execute.main(["reconcile", "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert calls == [{"noninteractive": False, "skip_system_deps": False}]
+    assert payload["command"] == "reconcile"
+    assert payload["desired_state"] == "enabled"
+
+
+def test_execute_install_alias_runs_setup(monkeypatch, capsys):
+    calls = []
+
+    def fake_import(name):
+        if name == "helpers.setup":
+            return type(
+                "Setup",
+                (),
+                {"setup_plugin": lambda **kwargs: calls.append(kwargs) or {"ok": True}},
+            )
+        if name == "helpers.diagnostics":
+            return type("Diagnostics", (), {"collect_status": _status})
+        raise AssertionError(name)
+
+    monkeypatch.setattr(plugin_imports, "plugin_import", fake_import)
+    monkeypatch.setattr(execute, "_is_plugin_enabled", lambda: True)
+
+    assert execute.main(["install", "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert calls == [{"noninteractive": False, "skip_system_deps": False}]
+    assert payload["command"] == "install"
 
 
 def test_execute_run_uninstalls_when_plugin_disabled(monkeypatch, capsys):
@@ -123,6 +175,40 @@ def test_execute_run_uninstalls_when_plugin_disabled(monkeypatch, capsys):
 
     assert calls == [{"remove_extensions": False}]
     assert "CloakBrowser uninstall" in capsys.readouterr().out
+
+
+def test_execute_status_json_includes_toggle_state(monkeypatch, capsys):
+    monkeypatch.setattr(
+        plugin_imports,
+        "plugin_import",
+        lambda name: type("Diagnostics", (), {"collect_status": _status}),
+    )
+    monkeypatch.setattr(execute, "_is_plugin_enabled", lambda: False)
+
+    assert execute.main(["status", "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["desired_state"] == "disabled"
+    assert payload["toggle_state"] == "disabled"
+
+
+def test_execute_enable_toggles_agent_zero_state(monkeypatch, capsys):
+    toggles = []
+
+    monkeypatch.setattr(
+        plugin_imports,
+        "plugin_import",
+        lambda name: type("Diagnostics", (), {"collect_status": _status}),
+    )
+    monkeypatch.setattr(execute, "_set_plugin_enabled", lambda enabled: toggles.append(enabled))
+    monkeypatch.setattr(execute, "_is_plugin_enabled", lambda: True)
+
+    assert execute.main(["enable", "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert toggles == [True]
+    assert payload["command"] == "enable"
+    assert payload["desired_state"] == "enabled"
 
 
 def test_execute_run_force_sets_up_even_when_plugin_disabled(monkeypatch, capsys):
@@ -165,3 +251,35 @@ def test_plugin_enabled_check_uses_agent_zero_helpers_not_local_helpers(monkeypa
     monkeypatch.setattr(plugin_imports, "ensure_agent_zero_path", lambda _root: None)
 
     assert execute._is_plugin_enabled() is False
+
+
+def test_plugin_enabled_check_accepts_structured_agent_zero_entries(monkeypatch, tmp_path):
+    agent_zero = tmp_path / "agent-zero"
+    helpers_dir = agent_zero / "helpers"
+    helpers_dir.mkdir(parents=True)
+    (helpers_dir / "__init__.py").write_text("", encoding="utf-8")
+    (helpers_dir / "plugins.py").write_text(
+        "from types import SimpleNamespace\n"
+        "def get_enabled_plugins(_scope):\n"
+        "    return [{'name': 'other'}, {'plugin_name': 'cloakbrowser'}, SimpleNamespace(id='third')]\n",
+        encoding="utf-8",
+    )
+    monkeypatch.syspath_prepend(str(agent_zero))
+    monkeypatch.setattr(plugin_imports, "ensure_agent_zero_path", lambda _root: None)
+
+    assert execute._is_plugin_enabled() is True
+
+
+def test_plugin_and_package_versions_match():
+    root = Path(__file__).resolve().parents[2]
+    plugin_version = _yaml_value(root / "plugin.yaml", "version")
+    pyproject = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
+    assert pyproject["project"]["version"] == plugin_version
+
+
+def _yaml_value(path: Path, key: str) -> str:
+    prefix = f"{key}:"
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if line.startswith(prefix):
+            return line.split(":", 1)[1].strip().strip('"').strip("'")
+    raise AssertionError(f"{key} not found in {path}")
