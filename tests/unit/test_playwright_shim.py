@@ -298,6 +298,11 @@ def test_agent_zero_managed_browser_path_is_patched():
             "executable_path": "/git/agent-zero/usr/plugins/_browser/playwright/chromium-1169/chrome-linux/chrome"
         }
     )
+    assert should_patch_launch(
+        {
+            "executable_path": "/a0/tmp/playwright/chromium-1169/chrome-linux/chrome"
+        }
+    )
 
 
 def test_cloak_kwargs_strips_launch_wrapper_args():
