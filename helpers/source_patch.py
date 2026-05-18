@@ -8,8 +8,8 @@ from typing import Any
 
 from .patcher import backup_file, sha256_file
 
-PATCH_VERSION = "9"
-PATCH_MARKER = "CLOAKBROWSER_SOURCE_PATCH_V9"
+PATCH_VERSION = "10"
+PATCH_MARKER = "CLOAKBROWSER_SOURCE_PATCH_V10"
 OLD_PATCH_MARKERS = (
     "CLOAKBROWSER_SOURCE_PATCH_V1",
     "CLOAKBROWSER_SOURCE_PATCH_V2",
@@ -19,6 +19,7 @@ OLD_PATCH_MARKERS = (
     "CLOAKBROWSER_SOURCE_PATCH_V6",
     "CLOAKBROWSER_SOURCE_PATCH_V7",
     "CLOAKBROWSER_SOURCE_PATCH_V8",
+    "CLOAKBROWSER_SOURCE_PATCH_V9",
 )
 
 SOURCE_RUNTIME_HELPER = f"""
@@ -438,7 +439,7 @@ def patch_runtime_source(manifest: dict[str, Any]) -> dict[str, Any]:
         _record_runtime_patch(manifest, result)
         return result
 
-    is_old_patch = any(marker in original_text for marker in OLD_PATCH_MARKERS)
+    is_old_patch = _has_old_or_partial_patch(original_text)
     original_hash = sha256_file(target)
     patched_text = (
         upgrade_runtime_source_text(original_text)
@@ -527,6 +528,7 @@ def upgrade_runtime_source_text(text: str) -> str:
     patched = text
     for old_marker in OLD_PATCH_MARKERS:
         patched = patched.replace(old_marker, PATCH_MARKER)
+    patched = _ensure_helper_block(patched)
     patched = _replace_helper_block(patched)
     patched = _replace_first_matching_once(
         patched,
@@ -582,6 +584,29 @@ def upgrade_runtime_source_text(text: str) -> str:
     if PATCH_MARKER not in patched:
         raise ValueError("Expected upgraded runtime source to contain current patch marker")
     return patched
+
+
+def _has_old_or_partial_patch(text: str) -> bool:
+    if any(marker in text for marker in OLD_PATCH_MARKERS):
+        return True
+    return any(
+        snippet in text
+        for snippet in (
+            LAUNCH_PATCHED,
+            SHADOW_PATCHED,
+            CONTENT_HELPER_PATCHED,
+            START_PAGES_PATCHED,
+            START_PAGES_PATCHED_V1,
+            OPEN_PATCHED,
+            OPEN_PATCHED_WITH_LIMIT,
+            OPEN_PATCHED_V1,
+            OPEN_PATCHED_V2,
+            CLOSE_BROWSER_PATCHED,
+            CLOSE_ALL_PATCHED,
+            CONTEXT_CLOSED_PATCHED,
+            STOP_PLAYWRIGHT_PATCHED,
+        )
+    )
 
 
 def _ensure_helper_block(text: str) -> str:
