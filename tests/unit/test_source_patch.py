@@ -3,7 +3,7 @@ import shutil
 from helpers import source_patch
 
 
-def test_patch_runtime_source_applies_v8_without_legacy_plugin_root(monkeypatch, tmp_path):
+def test_patch_runtime_source_applies_v10_without_legacy_plugin_root(monkeypatch, tmp_path):
     runtime = tmp_path / "runtime.py"
     runtime.write_text(_old_runtime_source(), encoding="utf-8")
     monkeypatch.setattr(source_patch, "browser_runtime_source_path", lambda: runtime)
@@ -13,7 +13,7 @@ def test_patch_runtime_source_applies_v8_without_legacy_plugin_root(monkeypatch,
 
     text = runtime.read_text(encoding="utf-8")
     assert result["applied"] is True
-    assert result["patch_version"] == "9"
+    assert result["patch_version"] == "10"
     assert source_patch.PATCH_MARKER in text
     assert 'find_plugin_dir("cloakbrowser")' in text
     assert "/a0/usr/plugins/cloakbrowser" not in text
@@ -118,6 +118,24 @@ def test_patch_runtime_source_upgrades_v8_content_helper_guard(monkeypatch, tmp_
     assert source_patch.PATCH_MARKER in text
     assert "CLOAKBROWSER_SOURCE_PATCH_V8" not in text
     assert source_patch.CONTENT_HELPER_PATCHED in text
+
+
+def test_patch_runtime_source_repairs_markerless_partial_patch(monkeypatch, tmp_path):
+    runtime = tmp_path / "runtime.py"
+    markerless_partial = source_patch.patch_runtime_source_text(_current_runtime_source())
+    markerless_partial = markerless_partial.replace(source_patch.SOURCE_RUNTIME_HELPER, "\n")
+    runtime.write_text(markerless_partial, encoding="utf-8")
+    monkeypatch.setattr(source_patch, "browser_runtime_source_path", lambda: runtime)
+    manifest = {}
+
+    result = source_patch.patch_runtime_source(manifest)
+
+    text = runtime.read_text(encoding="utf-8")
+    assert result["upgraded"] is True
+    assert source_patch.PATCH_MARKER in text
+    assert source_patch.LAUNCH_PATCHED in text
+    assert source_patch.CONTENT_HELPER_PATCHED in text
+    assert source_patch.OPEN_PATCHED_WITH_LIMIT in text
 
 
 def _old_runtime_source() -> str:
