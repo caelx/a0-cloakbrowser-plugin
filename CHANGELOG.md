@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Route current Agent Zero `/tmp/playwright/chromium-*` Browser launches
+  through CloakBrowser.
 - Bump the Agent Zero `_browser` runtime source bootstrap to V10 and repair
   markerless partial runtime patches left by older installs.
 - Bump the Agent Zero `_browser` runtime source bootstrap to V9 and guard the

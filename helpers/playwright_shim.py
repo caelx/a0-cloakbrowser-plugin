@@ -227,6 +227,7 @@ def should_patch_launch(kwargs: dict[str, Any]) -> bool:
     return (
         "cloakbrowser" in normalized
         or "chromium-cloakbrowser" in normalized
+        or "/tmp/playwright/chromium-" in normalized
         or "/plugins/_browser/playwright/" in normalized
         or "/usr/plugins/_browser/playwright/" in normalized
     )
