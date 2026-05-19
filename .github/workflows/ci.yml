@@ -25,11 +25,13 @@ jobs:
           CLOAKBROWSER_AGENT_ZERO_IMAGE: cloakbrowser-agent-zero-ci
           CLOAKBROWSER_LIVE_DETECTOR: "1"
           CLOAKBROWSER_LIVE_DETECTOR_STRICT: "1"
+          GITHUB_TOKEN: ${{ github.token }}
       - run: bash ci/run_agent_zero_integration.sh
         env:
           CLOAKBROWSER_AGENT_ZERO_IMAGE: cloakbrowser-agent-zero-ci
           CLOAKBROWSER_INTEGRATION_SCOPE: small-shm
           CLOAKBROWSER_DOCKER_SHM_SIZE: 64m
+          GITHUB_TOKEN: ${{ github.token }}
       - uses: actions/upload-artifact@v7
         if: always()
         with:

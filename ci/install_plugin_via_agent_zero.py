@@ -3,13 +3,17 @@ from __future__ import annotations
 
 import json
 import os
-import sys
+
+try:
+    from runtime_paths import bootstrap
+except ImportError:
+    from ci.runtime_paths import bootstrap
 
 
 def main() -> int:
     repo = os.environ.get("CLOAKBROWSER_PLUGIN_REPO", "https://github.com/caelx/a0-cloakbrowser-plugin.git")
     plugin_name = "cloakbrowser"
-    sys.path.insert(0, "/git/agent-zero")
+    bootstrap()
     from plugins._plugin_installer.helpers.install import install_from_git
     from helpers import plugins
 

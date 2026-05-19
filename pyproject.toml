@@ -7,7 +7,7 @@ dependencies = []
 
 [dependency-groups]
 dev = [
-    "cloakbrowser[geoip]==0.3.27",
+    "cloakbrowser[geoip]==0.3.28",
     "pytest==8.3.4",
     "ruff==0.8.4",
 ]

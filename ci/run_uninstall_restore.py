@@ -6,9 +6,14 @@ import subprocess
 import sys
 from pathlib import Path
 
+try:
+    from runtime_paths import bootstrap
+except ImportError:
+    from ci.runtime_paths import bootstrap
+
 
 def main() -> int:
-    sys.path.insert(0, "/git/agent-zero")
+    agent_zero_dir = bootstrap()
     from helpers import plugins
 
     plugin_dir = plugins.find_plugin_dir("cloakbrowser")
@@ -19,7 +24,7 @@ def main() -> int:
     manifest_path = Path(plugin_dir) / ".cloakbrowser-install-manifest.json"
     manifest_before = json.loads(manifest_path.read_text(encoding="utf-8"))
     masquerade = Path(manifest_before.get("playwright_shim", {}).get("masquerade_path") or "")
-    runtime_profile = Path("/git/agent-zero/tmp/browser/sessions/cloakbrowser-runtime-ci")
+    runtime_profile = agent_zero_dir / "tmp" / "browser" / "sessions" / "cloakbrowser-runtime-ci"
     before_config = get_browser_config()
     result = subprocess.run(
         [sys.executable, str(Path(plugin_dir) / "execute.py"), "uninstall", "--noninteractive", "--json"],

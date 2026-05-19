@@ -4,17 +4,21 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-import sys
 import time
 from pathlib import Path
 from typing import Any
+
+try:
+    from runtime_paths import bootstrap
+except ImportError:
+    from ci.runtime_paths import bootstrap
 
 
 ZIPERTO_URL = "https://www.ziperto.com/"
 
 
 async def main() -> int:
-    sys.path.insert(0, "/git/agent-zero")
+    bootstrap()
     from plugins._browser.helpers.runtime import _BrowserRuntimeCore
     from usr.plugins.cloakbrowser.helpers.extensions import active_extension_paths
     from usr.plugins.cloakbrowser.helpers.playwright_shim import patch_playwright, status

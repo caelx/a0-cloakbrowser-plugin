@@ -5,12 +5,16 @@ import asyncio
 import json
 import copy
 import os
-import sys
 from pathlib import Path
+
+try:
+    from runtime_paths import bootstrap
+except ImportError:
+    from ci.runtime_paths import bootstrap
 
 
 async def main() -> int:
-    sys.path.insert(0, "/git/agent-zero")
+    bootstrap()
     from usr.plugins.cloakbrowser.helpers.config import get_config
     from usr.plugins.cloakbrowser.helpers.extensions import (
         install_configured_extensions,
