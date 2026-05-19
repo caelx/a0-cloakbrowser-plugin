@@ -3,18 +3,22 @@ from __future__ import annotations
 
 import asyncio
 import json
-import sys
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
 
+try:
+    from runtime_paths import bootstrap
+except ImportError:
+    from ci.runtime_paths import bootstrap
+
 PAGE_COUNT = 21
 
 
 async def main() -> int:
-    sys.path.insert(0, "/git/agent-zero")
+    bootstrap()
     from plugins._browser.helpers.runtime import _BrowserRuntimeCore
     from usr.plugins.cloakbrowser.helpers.playwright_shim import patch_playwright, status
     from usr.plugins.cloakbrowser.helpers.runtime_patch import apply_runtime_patch

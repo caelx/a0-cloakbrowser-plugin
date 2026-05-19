@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import tarfile
 import tempfile
@@ -37,7 +38,7 @@ def install_ublock_origin_lite(target_dir: Path, config: dict[str, Any]) -> dict
 def _latest_tag() -> str:
     request = urllib.request.Request(
         REPO_TAGS_URL,
-        headers={"Accept": "application/vnd.github+json", "User-Agent": "cloakbrowser-agent-zero-plugin"},
+        headers=_github_headers(accept="application/vnd.github+json"),
     )
     with urllib.request.urlopen(request, timeout=60) as response:
         payload = json.loads(response.read().decode("utf-8"))
@@ -52,7 +53,7 @@ def _latest_tag() -> str:
 def _download_archive(tag: str, destination: Path) -> None:
     request = urllib.request.Request(
         ARCHIVE_URL.format(tag=tag),
-        headers={"User-Agent": "cloakbrowser-agent-zero-plugin"},
+        headers=_github_headers(),
     )
     with urllib.request.urlopen(request, timeout=180) as response:
         destination.write_bytes(response.read())
@@ -121,3 +122,14 @@ def _metadata(target_dir: Path, tag: str) -> dict[str, Any]:
         "manifest_name": manifest.get("name") or "",
         "manifest_version": manifest.get("version") or "",
     }
+
+
+def _github_headers(*, accept: str | None = None) -> dict[str, str]:
+    headers = {"User-Agent": "cloakbrowser-agent-zero-plugin"}
+    if accept:
+        headers["Accept"] = accept
+    token = os.environ.get("GITHUB_TOKEN")
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+        headers["X-GitHub-Api-Version"] = "2022-11-28"
+    return headers

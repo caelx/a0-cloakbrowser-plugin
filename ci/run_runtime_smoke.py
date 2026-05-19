@@ -3,9 +3,13 @@ from __future__ import annotations
 
 import asyncio
 import json
-import sys
 import time
 from pathlib import Path
+
+try:
+    from runtime_paths import bootstrap
+except ImportError:
+    from ci.runtime_paths import bootstrap
 
 
 FORBIDDEN_ARGS = ("--disable-gpu", "--disable-extensions", "--enable-automation")
@@ -18,7 +22,7 @@ REQUIRED_ARGS = (
 
 
 async def main() -> int:
-    sys.path.insert(0, "/git/agent-zero")
+    agent_zero_dir = bootstrap()
     from usr.plugins.cloakbrowser.helpers.runtime_patch import apply_runtime_patch
     from usr.plugins.cloakbrowser.helpers.playwright_shim import patch_playwright, status
     from plugins._browser.helpers.runtime import _BrowserRuntimeCore
@@ -28,7 +32,7 @@ async def main() -> int:
     core = _BrowserRuntimeCore("cloakbrowser-runtime-ci")
     result = {"profile_dir": str(core.profile_dir)}
     try:
-        profile_root = Path("/git/agent-zero/tmp/browser/sessions")
+        profile_root = agent_zero_dir / "tmp" / "browser" / "sessions"
         assert Path(core.profile_dir).resolve().is_relative_to(profile_root.resolve())
         await core.open("data:text/html,<title>runtime</title>")
         eval_result = await core.evaluate(

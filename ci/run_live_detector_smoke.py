@@ -5,10 +5,14 @@ import asyncio
 import json
 import os
 import re
-import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
+
+try:
+    from runtime_paths import bootstrap
+except ImportError:
+    from ci.runtime_paths import bootstrap
 
 
 @dataclass(frozen=True)
@@ -61,7 +65,7 @@ SKIPPED_TARGETS: tuple[LiveTarget, ...] = (
 
 
 async def main() -> int:
-    sys.path.insert(0, "/git/agent-zero")
+    bootstrap()
     from plugins._browser.helpers.runtime import _BrowserRuntimeCore
     from usr.plugins.cloakbrowser.helpers.playwright_shim import patch_playwright
     from usr.plugins.cloakbrowser.helpers.runtime_patch import apply_runtime_patch

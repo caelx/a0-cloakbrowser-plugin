@@ -4,9 +4,13 @@ from __future__ import annotations
 import asyncio
 import json
 import re
-import sys
 from pathlib import Path
 from urllib.parse import quote
+
+try:
+    from runtime_paths import bootstrap
+except ImportError:
+    from ci.runtime_paths import bootstrap
 
 
 class FakeContext:
@@ -39,7 +43,7 @@ class Log:
 
 
 async def main() -> int:
-    sys.path.insert(0, "/git/agent-zero")
+    bootstrap()
     from plugins._browser.helpers import runtime as browser_runtime
     from plugins._browser.tools.browser import Browser
     from usr.plugins.cloakbrowser.helpers.playwright_shim import patch_playwright

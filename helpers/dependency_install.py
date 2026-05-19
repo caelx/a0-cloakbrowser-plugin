@@ -98,7 +98,7 @@ def install_python_dependencies(requirement: str | None = None) -> dict:
         requirement = (
             requirements_path.read_text(encoding="utf-8").strip()
             if requirements_path.is_file()
-            else "cloakbrowser[geoip]==0.3.27"
+            else "cloakbrowser[geoip]==0.3.28"
         )
     cmd = [sys.executable, "-m", "pip", "install", "playwright", requirement]
     result = subprocess.run(cmd, check=False, text=True, capture_output=True)
