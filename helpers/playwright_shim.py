@@ -107,7 +107,12 @@ def dedupe_args(args: list[str] | tuple[str, ...] | None) -> list[str]:
     return deduped
 
 
-def build_launch_overrides(kwargs: dict[str, Any], *, persistent: bool) -> tuple[dict[str, Any], dict[str, Any]]:
+def build_launch_overrides(
+    kwargs: dict[str, Any],
+    *,
+    persistent: bool,
+    launcher: str | None = None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
     cfg = get_config()
     apply_environment(cfg)
     if not should_patch_launch(kwargs):
@@ -191,7 +196,7 @@ def build_launch_overrides(kwargs: dict[str, Any], *, persistent: bool) -> tuple
     info = {
         "patched": True,
         "persistent": persistent,
-        "launcher": (
+        "launcher": launcher or (
             "cloakbrowser.launch_persistent_context_async"
             if persistent
             else "cloakbrowser.launch_async"
@@ -204,7 +209,7 @@ def build_launch_overrides(kwargs: dict[str, Any], *, persistent: bool) -> tuple
         "screen": launch_kwargs["screen"],
         "effective_location": effective_location,
         "shared_memory": {
-            "disable_dev_shm_usage": "--disable-dev-shm-usage" not in launch_kwargs["ignore_default_args"],
+            "disable_dev_shm_usage": _disables_dev_shm_usage(launch_kwargs["ignore_default_args"]),
         },
     }
     _STATE["last_launch"] = info
@@ -242,9 +247,28 @@ def _plugin_enabled() -> bool:
             from helpers import plugins
 
             enabled = plugins.get_enabled_plugins(None)
-        return enabled is None or PLUGIN_NAME in enabled
+        return enabled is None or _enabled_plugins_include(enabled, PLUGIN_NAME)
     except Exception:
         return True
+
+
+def _enabled_plugins_include(enabled: Any, plugin_name: str) -> bool:
+    for item in enabled or []:
+        if item == plugin_name:
+            return True
+        if isinstance(item, dict):
+            name = item.get("name") or item.get("id") or item.get("plugin_name")
+        else:
+            name = getattr(item, "name", None) or getattr(item, "id", None)
+        if name == plugin_name:
+            return True
+    return False
+
+
+def _disables_dev_shm_usage(ignore_default_args: Any) -> bool:
+    if ignore_default_args is True:
+        return True
+    return "--disable-dev-shm-usage" not in list(ignore_default_args or [])
 
 
 def redact_args(args: list[str]) -> list[str]:
@@ -391,7 +415,11 @@ def _patch_class(cls: type, *, async_mode: bool) -> None:
             async def launch(self, **kwargs):
                 if _IN_CLOAK_LAUNCH.get():
                     return await originals["launch"](self, **kwargs)
-                patched_kwargs, info = build_launch_overrides(kwargs, persistent=False)
+                patched_kwargs, info = build_launch_overrides(
+                    kwargs,
+                    persistent=False,
+                    launcher="cloakbrowser.launch_async",
+                )
                 if info.get("patched"):
                     return await _cloak_launch_async(patched_kwargs)
                 return await originals["launch"](self, **patched_kwargs)
@@ -399,7 +427,11 @@ def _patch_class(cls: type, *, async_mode: bool) -> None:
             def launch(self, **kwargs):
                 if _IN_CLOAK_LAUNCH.get():
                     return originals["launch"](self, **kwargs)
-                patched_kwargs, info = build_launch_overrides(kwargs, persistent=False)
+                patched_kwargs, info = build_launch_overrides(
+                    kwargs,
+                    persistent=False,
+                    launcher="cloakbrowser.launch",
+                )
                 if info.get("patched"):
                     return _cloak_launch_sync(patched_kwargs)
                 return originals["launch"](self, **patched_kwargs)
@@ -412,7 +444,11 @@ def _patch_class(cls: type, *, async_mode: bool) -> None:
                     return await originals["launch_persistent_context"](
                         self, user_data_dir, **kwargs
                     )
-                patched_kwargs, info = build_launch_overrides(kwargs, persistent=True)
+                patched_kwargs, info = build_launch_overrides(
+                    kwargs,
+                    persistent=True,
+                    launcher="cloakbrowser.launch_persistent_context_async",
+                )
                 if info.get("patched"):
                     return await _cloak_launch_persistent_async(user_data_dir, patched_kwargs)
                 return await originals["launch_persistent_context"](self, user_data_dir, **patched_kwargs)
@@ -420,7 +456,11 @@ def _patch_class(cls: type, *, async_mode: bool) -> None:
             def launch_persistent_context(self, user_data_dir, **kwargs):
                 if _IN_CLOAK_LAUNCH.get():
                     return originals["launch_persistent_context"](self, user_data_dir, **kwargs)
-                patched_kwargs, info = build_launch_overrides(kwargs, persistent=True)
+                patched_kwargs, info = build_launch_overrides(
+                    kwargs,
+                    persistent=True,
+                    launcher="cloakbrowser.launch_persistent_context",
+                )
                 if info.get("patched"):
                     return _cloak_launch_persistent_sync(user_data_dir, patched_kwargs)
                 return originals["launch_persistent_context"](self, user_data_dir, **patched_kwargs)
