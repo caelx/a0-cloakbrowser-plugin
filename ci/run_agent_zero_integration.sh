@@ -16,6 +16,7 @@ docker run --rm --shm-size="$shm_size" \
   -e CLOAKBROWSER_LIVE_DETECTOR="${CLOAKBROWSER_LIVE_DETECTOR:-0}" \
   -e CLOAKBROWSER_LIVE_DETECTOR_STRICT="${CLOAKBROWSER_LIVE_DETECTOR_STRICT:-0}" \
   -e CLOAKBROWSER_UBOL_REQUIRE_LIVE_BLOCK="${CLOAKBROWSER_UBOL_REQUIRE_LIVE_BLOCK:-0}" \
+  -e GITHUB_TOKEN="${GITHUB_TOKEN:-}" \
   -v "$root:/plugin-src:ro" \
   -v "$root/artifacts:/artifacts" \
   "$image" \
@@ -60,10 +61,10 @@ PY
     fi
   ' 2>&1 | tee "$log"
 docker_status=${PIPESTATUS[0]}
-set -e
-
+set +e
 python "$root/ci/scan_browser_log.py" "$log"
 scan_status=$?
+set -e
 if [ "$docker_status" -ne 0 ]; then
   exit "$docker_status"
 fi

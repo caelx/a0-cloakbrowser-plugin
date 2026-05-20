@@ -21,8 +21,8 @@ def install():
 def uninstall():
     from plugin_imports import plugin_import
 
-    plugin_import("helpers.uninstall").uninstall(remove_extensions=True)
-    return True
+    result = plugin_import("helpers.uninstall").uninstall(remove_extensions=True)
+    return bool(result.get("ok")) if isinstance(result, dict) else bool(result)
 
 
 def get_plugin_config(default=None, **kwargs):

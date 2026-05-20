@@ -7,6 +7,8 @@ from helpers.playwright_shim import (
     _STATE,
     _cloak_ignore_default_args,
     _cloak_kwargs,
+    _disables_dev_shm_usage,
+    _enabled_plugins_include,
     _patch_class,
     dedupe_args,
     filter_args,
@@ -171,6 +173,53 @@ def test_build_launch_overrides_uses_old_working_profile_defaults(monkeypatch):
         "locale": "en-US",
         "exit_ip": "203.0.113.10",
     }
+
+
+def test_build_launch_overrides_records_requested_launcher(monkeypatch):
+    from helpers import playwright_shim
+
+    package = ModuleType("cloakbrowser")
+    package.ensure_binary = lambda: "/opt/cloakbrowser/chrome"
+    browser_module = ModuleType("cloakbrowser.browser")
+    browser_module.build_args = lambda _stealth, args, **_kwargs: list(args)
+    browser_module.maybe_resolve_geoip = lambda geoip, proxy, timezone, locale: (
+        timezone,
+        locale,
+        None,
+    )
+    config_module = ModuleType("cloakbrowser.config")
+    config_module.IGNORE_DEFAULT_ARGS = []
+    monkeypatch.setitem(sys.modules, "cloakbrowser", package)
+    monkeypatch.setitem(sys.modules, "cloakbrowser.browser", browser_module)
+    monkeypatch.setitem(sys.modules, "cloakbrowser.config", config_module)
+    monkeypatch.setattr(playwright_shim, "ensure_masquerade", lambda _binary: None)
+    monkeypatch.setattr(playwright_shim, "apply_environment", lambda _cfg: None)
+    monkeypatch.setattr(playwright_shim, "get_config", lambda: _minimal_config())
+
+    _launch_kwargs, info = playwright_shim.build_launch_overrides(
+        {},
+        persistent=False,
+        launcher="cloakbrowser.launch",
+    )
+
+    assert info["launcher"] == "cloakbrowser.launch"
+
+
+def test_enabled_plugins_accepts_structured_entries():
+    class PluginEntry:
+        name = "cloakbrowser"
+
+    assert _enabled_plugins_include(["cloakbrowser"], "cloakbrowser")
+    assert _enabled_plugins_include([{"name": "cloakbrowser"}], "cloakbrowser")
+    assert _enabled_plugins_include([{"id": "cloakbrowser"}], "cloakbrowser")
+    assert _enabled_plugins_include([{"plugin_name": "cloakbrowser"}], "cloakbrowser")
+    assert _enabled_plugins_include([PluginEntry()], "cloakbrowser")
+
+
+def test_shared_memory_status_accepts_boolean_ignore_default_args():
+    assert _disables_dev_shm_usage(True) is True
+    assert _disables_dev_shm_usage(["--disable-dev-shm-usage"]) is False
+    assert _disables_dev_shm_usage([]) is True
 
 
 def test_build_launch_overrides_uses_cloakbrowser_geoip_for_proxy(monkeypatch):
