@@ -44,6 +44,7 @@ PY
     test -n "$plugin_dir"
     cd "$plugin_dir"
     ln -sfn /artifacts artifacts
+    python execute.py enable --json > /artifacts/plugin-enable.json
     python execute.py setup --noninteractive --force --json > /artifacts/plugin-setup.json
     python execute.py verify --json > /artifacts/plugin-verify.json
     python execute.py status --json > /artifacts/plugin-status.json

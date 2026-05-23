@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Bump plugin version to `1.3.6`.
+- Enable the plugin in integration CI before setup so launch verification runs
+  against the same enabled lifecycle used by Agent Zero.
 - Bump plugin version to `1.3.5`.
 - Allow setup/repair integration runs to continue after a runtime patch when no
   live Agent Zero `run_ui` process exists to restart.
