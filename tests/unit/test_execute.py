@@ -108,6 +108,43 @@ def test_execute_json_mode_is_machine_readable(monkeypatch, capsys):
     assert payload["desired_state"] == "enabled"
 
 
+def test_execute_json_mode_allows_pending_restart(monkeypatch, capsys):
+    status = _status()
+    status["setup"] = {"installed": True, "status": "setup"}
+    status["invariants"] = {
+        "source_patch_current": True,
+        "extension_config_reconciled": True,
+        "last_launch_used_cloakbrowser": False,
+    }
+
+    def fake_import(name):
+        if name == "helpers.setup":
+            return type(
+                "Setup",
+                (),
+                {
+                    "setup_plugin": lambda **kwargs: {
+                        "ok": True,
+                        "restart_scheduled": True,
+                        "restart_message": "Agent Zero run_ui restart scheduled in 10 seconds.",
+                    }
+                },
+            )
+        if name == "helpers.diagnostics":
+            return type("Diagnostics", (), {"collect_status": lambda: status})
+        raise AssertionError(name)
+
+    monkeypatch.setattr(plugin_imports, "plugin_import", fake_import)
+    monkeypatch.setattr(execute, "_is_plugin_enabled", lambda: True)
+
+    assert execute.main(["--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["ok"] is True
+    assert payload["readiness"]["restart_scheduled"] is True
+    assert "scheduled" in payload["readiness"]["restart_message"]
+
+
 def test_execute_reconcile_alias_runs_setup(monkeypatch, capsys):
     calls = []
 

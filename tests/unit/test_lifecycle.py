@@ -76,23 +76,30 @@ def test_restart_agent_zero_is_skipped_when_runtime_patch_did_not_change(monkeyp
 
 def test_restart_agent_zero_uses_discovered_supervisor_program(monkeypatch):
     commands = []
+    schedules = []
     monkeypatch.setattr(lifecycle.shutil, "which", lambda name: "/usr/bin/supervisorctl")
 
     def fake_run(command, **kwargs):
         commands.append(command)
         if command == ["/usr/bin/supervisorctl", "status"]:
             return SimpleNamespace(returncode=0, stdout="agent-zero RUNNING pid 1\n", stderr="")
-        return SimpleNamespace(returncode=0, stdout="agent-zero: restarted\n", stderr="")
 
     monkeypatch.setattr(lifecycle.subprocess, "run", fake_run)
+    monkeypatch.setattr(
+        lifecycle,
+        "_schedule_supervisor_restart",
+        lambda supervisorctl, program, delay_seconds: schedules.append(
+            (supervisorctl, program, delay_seconds)
+        )
+        or {"scheduled": True, "message": "scheduled"},
+    )
 
     result = lifecycle.restart_agent_zero_if_needed(True)
 
-    assert commands == [
-        ["/usr/bin/supervisorctl", "status"],
-        ["/usr/bin/supervisorctl", "restart", "agent-zero"],
-    ]
-    assert result["restarted"] is True
+    assert commands == [["/usr/bin/supervisorctl", "status"]]
+    assert schedules == [("/usr/bin/supervisorctl", "agent-zero", 10)]
+    assert result["scheduled"] is True
+    assert result["restarted"] is False
     assert result["restart_required"] is False
 
 
@@ -100,6 +107,7 @@ def test_restart_agent_zero_discovers_run_ui_by_pid_cmdline(monkeypatch, tmp_pat
     proc_root = tmp_path / "proc"
     _proc(proc_root, 27, ["/opt/venv-a0/bin/python", "/a0/run_ui.py", "--port=80"])
     commands = []
+    schedules = []
     monkeypatch.setattr(lifecycle.shutil, "which", lambda name: "/usr/bin/supervisorctl")
 
     def fake_run(command, **kwargs):
@@ -110,9 +118,16 @@ def test_restart_agent_zero_discovers_run_ui_by_pid_cmdline(monkeypatch, tmp_pat
                 stdout="run_cron RUNNING pid 23\nrun_ui RUNNING pid 27\n",
                 stderr="",
             )
-        return SimpleNamespace(returncode=0, stdout="run_ui: restarted\n", stderr="")
 
     monkeypatch.setattr(lifecycle.subprocess, "run", fake_run)
+    monkeypatch.setattr(
+        lifecycle,
+        "_schedule_supervisor_restart",
+        lambda supervisorctl, program, delay_seconds: schedules.append(
+            (supervisorctl, program, delay_seconds)
+        )
+        or {"scheduled": True, "message": "scheduled"},
+    )
     original_program_lookup = lifecycle._agent_zero_supervisor_program
     monkeypatch.setattr(
         lifecycle,
@@ -122,12 +137,10 @@ def test_restart_agent_zero_discovers_run_ui_by_pid_cmdline(monkeypatch, tmp_pat
 
     result = lifecycle.restart_agent_zero_if_needed(True)
 
-    assert commands == [
-        ["/usr/bin/supervisorctl", "status"],
-        ["/usr/bin/supervisorctl", "restart", "run_ui"],
-    ]
+    assert commands == [["/usr/bin/supervisorctl", "status"]]
+    assert schedules == [("/usr/bin/supervisorctl", "run_ui", 10)]
     assert result["program"] == "run_ui"
-    assert result["restarted"] is True
+    assert result["scheduled"] is True
 
 
 def test_restart_agent_zero_discovers_run_ui_child_process(monkeypatch, tmp_path):
@@ -135,15 +148,23 @@ def test_restart_agent_zero_discovers_run_ui_child_process(monkeypatch, tmp_path
     _proc(proc_root, 27, ["python", "/exe/self_update_manager.py", "docker-run-ui"])
     _proc(proc_root, 209, ["/opt/venv-a0/bin/python", "/a0/run_ui.py", "--port=80"], ppid=27)
     commands = []
+    schedules = []
     monkeypatch.setattr(lifecycle.shutil, "which", lambda name: "/usr/bin/supervisorctl")
 
     def fake_run(command, **kwargs):
         commands.append(command)
         if command == ["/usr/bin/supervisorctl", "status"]:
             return SimpleNamespace(returncode=0, stdout="run_ui RUNNING pid 27\n", stderr="")
-        return SimpleNamespace(returncode=0, stdout="run_ui: restarted\n", stderr="")
 
     monkeypatch.setattr(lifecycle.subprocess, "run", fake_run)
+    monkeypatch.setattr(
+        lifecycle,
+        "_schedule_supervisor_restart",
+        lambda supervisorctl, program, delay_seconds: schedules.append(
+            (supervisorctl, program, delay_seconds)
+        )
+        or {"scheduled": True, "message": "scheduled"},
+    )
     original_program_lookup = lifecycle._agent_zero_supervisor_program
     monkeypatch.setattr(
         lifecycle,
@@ -153,12 +174,14 @@ def test_restart_agent_zero_discovers_run_ui_child_process(monkeypatch, tmp_path
 
     result = lifecycle.restart_agent_zero_if_needed(True)
 
-    assert commands[-1] == ["/usr/bin/supervisorctl", "restart", "run_ui"]
+    assert commands[-1] == ["/usr/bin/supervisorctl", "status"]
+    assert schedules == [("/usr/bin/supervisorctl", "run_ui", 10)]
     assert result["program"] == "run_ui"
 
 
 def test_restart_agent_zero_parses_status_stdout_when_supervisor_returns_nonzero(monkeypatch):
     commands = []
+    schedules = []
     monkeypatch.setattr(lifecycle.shutil, "which", lambda name: "/usr/bin/supervisorctl")
 
     def fake_run(command, **kwargs):
@@ -169,39 +192,78 @@ def test_restart_agent_zero_parses_status_stdout_when_supervisor_returns_nonzero
                 stdout="agent-zero RUNNING pid 1\nworker STOPPED not started\n",
                 stderr="worker stopped",
             )
-        return SimpleNamespace(returncode=0, stdout="agent-zero: restarted\n", stderr="")
 
     monkeypatch.setattr(lifecycle.subprocess, "run", fake_run)
+    monkeypatch.setattr(
+        lifecycle,
+        "_schedule_supervisor_restart",
+        lambda supervisorctl, program, delay_seconds: schedules.append(
+            (supervisorctl, program, delay_seconds)
+        )
+        or {"scheduled": True, "message": "scheduled"},
+    )
 
     result = lifecycle.restart_agent_zero_if_needed(True)
 
-    assert commands == [
-        ["/usr/bin/supervisorctl", "status"],
-        ["/usr/bin/supervisorctl", "restart", "agent-zero"],
-    ]
-    assert result["restarted"] is True
+    assert commands == [["/usr/bin/supervisorctl", "status"]]
+    assert schedules == [("/usr/bin/supervisorctl", "agent-zero", 10)]
+    assert result["scheduled"] is True
     assert result["restart_required"] is False
 
 
 def test_restart_agent_zero_detects_agent_zero_when_program_is_stopped(monkeypatch):
     commands = []
+    schedules = []
     monkeypatch.setattr(lifecycle.shutil, "which", lambda name: "/usr/bin/supervisorctl")
 
     def fake_run(command, **kwargs):
         commands.append(command)
         if command == ["/usr/bin/supervisorctl", "status"]:
             return SimpleNamespace(returncode=0, stdout="agent-zero STOPPED not started\n", stderr="")
-        return SimpleNamespace(returncode=0, stdout="agent-zero: restarted\n", stderr="")
 
     monkeypatch.setattr(lifecycle.subprocess, "run", fake_run)
+    monkeypatch.setattr(
+        lifecycle,
+        "_schedule_supervisor_restart",
+        lambda supervisorctl, program, delay_seconds: schedules.append(
+            (supervisorctl, program, delay_seconds)
+        )
+        or {"scheduled": True, "message": "scheduled"},
+    )
 
     result = lifecycle.restart_agent_zero_if_needed(True)
 
-    assert commands == [
-        ["/usr/bin/supervisorctl", "status"],
-        ["/usr/bin/supervisorctl", "restart", "agent-zero"],
-    ]
-    assert result["restarted"] is True
+    assert commands == [["/usr/bin/supervisorctl", "status"]]
+    assert schedules == [("/usr/bin/supervisorctl", "agent-zero", 10)]
+    assert result["scheduled"] is True
+
+
+def test_scheduled_restart_falls_back_to_start(monkeypatch, tmp_path):
+    commands = []
+    monkeypatch.setattr(lifecycle, "_lifecycle_log_path", lambda: tmp_path / "lifecycle.log")
+
+    class Process:
+        pid = 123
+
+    def fake_popen(command, **kwargs):
+        commands.append(command)
+        return Process()
+
+    monkeypatch.setattr(lifecycle.subprocess, "Popen", fake_popen)
+
+    result = lifecycle._schedule_supervisor_restart(
+        "/usr/bin/supervisorctl",
+        "run_ui",
+        delay_seconds=10,
+    )
+
+    assert result["scheduled"] is True
+    assert result["scheduler_pid"] == 123
+    script = commands[0][2]
+    assert "sleep 10" in script
+    assert "supervisorctl' restart 'run_ui'" in script
+    assert "supervisorctl' start 'run_ui'" in script
+    assert "supervisorctl' status 'run_ui'" in script
 
 
 def test_restart_agent_zero_reports_manual_restart_when_program_missing(monkeypatch):

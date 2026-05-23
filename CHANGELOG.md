@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Bump plugin version to `1.3.2`.
+- Schedule Agent Zero `run_ui` restarts 10 seconds after Execute returns so the
+  UI receives structured JSON before the server reloads.
+- Add lifecycle JSONL logging for browser cleanup and deferred restart
+  decisions.
 - Bump plugin version to `1.3.1`.
 - Bump the Agent Zero `_browser` runtime source bootstrap to V12 so existing
   installs replace the old plugin-root `sys.path` injection with a deterministic

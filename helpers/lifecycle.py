@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import signal
@@ -29,6 +30,15 @@ def reconcile_after_setup(config: dict[str, Any], source_patch: dict[str, Any]) 
             "skipped": True,
             "reason": "live_runtime_already_current",
         }
+    _log_event(
+        "reconcile_after_setup",
+        {
+            "source_changed": source_changed,
+            "stock_playwright_detected": stock_playwright_detected,
+            "restart_needed": restart_needed,
+            "matched_pids": [proc.get("pid") for proc in matched],
+        },
+    )
     agent_zero_restart = restart_agent_zero_if_needed(restart_needed)
     return {
         "browser_processes_stopped": stopped,
@@ -102,18 +112,20 @@ def stop_managed_browser_processes(
     }
 
 
-def restart_agent_zero_if_needed(restart_needed: bool) -> dict[str, Any]:
+def restart_agent_zero_if_needed(restart_needed: bool, *, delay_seconds: int = 10) -> dict[str, Any]:
     if not restart_needed:
         return {"needed": False, "restarted": False, "restart_required": False}
 
     supervisorctl = shutil.which("supervisorctl")
     if not supervisorctl:
-        return {
+        result = {
             "needed": True,
             "restarted": False,
             "restart_required": True,
             "reason": "supervisorctl_not_found",
         }
+        _log_event("agent_zero_restart", result)
+        return result
 
     status = subprocess.run(
         [supervisorctl, "status"],
@@ -124,7 +136,7 @@ def restart_agent_zero_if_needed(restart_needed: bool) -> dict[str, Any]:
     program = _agent_zero_supervisor_program(status.stdout)
     if not program:
         if status.returncode != 0:
-            return {
+            result = {
                 "needed": True,
                 "restarted": False,
                 "restart_required": True,
@@ -133,29 +145,72 @@ def restart_agent_zero_if_needed(restart_needed: bool) -> dict[str, Any]:
                 "stderr": status.stderr.strip(),
                 "status": status.stdout.strip(),
             }
-        return {
+            _log_event("agent_zero_restart", result)
+            return result
+        result = {
             "needed": True,
             "restarted": False,
             "restart_required": True,
             "reason": "agent_zero_program_not_found",
             "status": status.stdout.strip(),
         }
+        _log_event("agent_zero_restart", result)
+        return result
 
-    restart = subprocess.run(
-        [supervisorctl, "restart", program],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    return {
+    schedule = _schedule_supervisor_restart(supervisorctl, program, delay_seconds=delay_seconds)
+    result = {
         "needed": True,
         "program": program,
-        "restarted": restart.returncode == 0,
-        "restart_required": restart.returncode != 0,
-        "returncode": restart.returncode,
-        "stdout": restart.stdout.strip(),
-        "stderr": restart.stderr.strip(),
+        "restarted": False,
+        "scheduled": bool(schedule.get("scheduled")),
+        "restart_required": not bool(schedule.get("scheduled")),
+        "restart_after_execute": bool(schedule.get("scheduled")),
+        **schedule,
     }
+    _log_event("agent_zero_restart", result)
+    return result
+
+
+def _schedule_supervisor_restart(
+    supervisorctl: str,
+    program: str,
+    *,
+    delay_seconds: int,
+) -> dict[str, Any]:
+    log_path = _lifecycle_log_path()
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    quoted_log = _sh_quote(str(log_path))
+    quoted_supervisorctl = _sh_quote(supervisorctl)
+    quoted_program = _sh_quote(program)
+    command = (
+        f"sleep {int(delay_seconds)}; "
+        f"printf '%s\\n' '[cloakbrowser] restarting {program}' >> {quoted_log}; "
+        f"({quoted_supervisorctl} restart {quoted_program} "
+        f"|| {quoted_supervisorctl} start {quoted_program}) >> {quoted_log} 2>&1; "
+        f"{quoted_supervisorctl} status {quoted_program} >> {quoted_log} 2>&1"
+    )
+    try:
+        process = subprocess.Popen(
+            ["/bin/sh", "-c", command],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+            close_fds=True,
+        )
+    except Exception as exc:
+        return {"scheduled": False, "reason": "restart_schedule_failed", "error": str(exc)}
+    return {
+        "scheduled": True,
+        "delay_seconds": int(delay_seconds),
+        "scheduler_pid": process.pid,
+        "log_path": str(log_path),
+        "message": f"Agent Zero {program} restart scheduled in {int(delay_seconds)} seconds.",
+    }
+
+
+def _sh_quote(value: str) -> str:
+    return "'" + value.replace("'", "'\"'\"'") + "'"
 
 
 def _managed_browser_processes(
@@ -335,3 +390,18 @@ def _restart_reason(*, source_changed: bool, stock_playwright_detected: bool) ->
     if stock_playwright_detected:
         reasons.append("stock_playwright_browser_detected")
     return ",".join(reasons) if reasons else "not_required"
+
+
+def _lifecycle_log_path() -> Path:
+    return Path(__file__).resolve().parents[1] / ".cloakbrowser" / "lifecycle.log"
+
+
+def _log_event(event: str, payload: dict[str, Any]) -> None:
+    try:
+        path = _lifecycle_log_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        record = {"event": event, "timestamp": time.time(), **payload}
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(record, sort_keys=True) + "\n")
+    except Exception:
+        return

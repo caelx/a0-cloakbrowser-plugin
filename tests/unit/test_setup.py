@@ -121,6 +121,62 @@ def test_setup_fails_when_agent_zero_restart_is_still_required(monkeypatch, tmp_
     assert saved[-1]["last_repair_status"] == "failed"
 
 
+def test_setup_succeeds_when_agent_zero_restart_is_scheduled(monkeypatch, tmp_path):
+    cloakbrowser = types.ModuleType("cloakbrowser")
+    cloakbrowser.ensure_binary = lambda: "/bin/cloakbrowser"
+    monkeypatch.setitem(sys.modules, "cloakbrowser", cloakbrowser)
+    monkeypatch.setattr(setup.importlib.metadata, "version", lambda name: "1.0.0")
+    monkeypatch.setattr(
+        setup,
+        "get_config",
+        lambda: {"runtime": {"cloakbrowser_cache_dir": "/tmp/cache"}, "extensions": {}},
+    )
+    monkeypatch.setattr(setup, "apply_environment", lambda cfg: None)
+    monkeypatch.setattr(setup, "load_manifest", lambda: {})
+    saved = []
+    monkeypatch.setattr(
+        setup, "save_manifest", lambda manifest: saved.append(dict(manifest)) or manifest
+    )
+    monkeypatch.setattr(setup, "install_system_dependencies", lambda noninteractive: {"ok": True})
+    monkeypatch.setattr(setup, "install_python_dependencies", lambda **kwargs: {"ok": True})
+    monkeypatch.setattr(setup, "ensure_masquerade", lambda binary: tmp_path / "chrome")
+    monkeypatch.setattr(
+        setup, "ensure_display", lambda cfg, manifest: {"ok": True, "display": ":99"}
+    )
+    monkeypatch.setattr(setup, "install_configured_extensions", lambda cfg, manifest: [])
+    monkeypatch.setattr(setup, "sync_browser_extension_paths", lambda cfg: [])
+    monkeypatch.setattr(setup, "verify_extension_reconciliation", lambda cfg: {"ok": True})
+    monkeypatch.setattr(
+        setup,
+        "patch_runtime_source",
+        lambda manifest: {"applied": True, "already_patched": False},
+    )
+    monkeypatch.setattr(setup, "validate_runtime_patch", lambda manifest: {"ok": True})
+    verify_calls = []
+    monkeypatch.setattr(setup, "verify_browser_launch", lambda: verify_calls.append(True))
+    monkeypatch.setattr(
+        setup,
+        "reconcile_after_setup",
+        lambda cfg, source_patch: {
+            "browser_processes_stopped": {"matched": []},
+            "agent_zero_restart": {
+                "needed": True,
+                "scheduled": True,
+                "message": "Agent Zero run_ui restart scheduled in 10 seconds.",
+            },
+            "restart_required": False,
+        },
+    )
+
+    result = setup.setup_plugin(noninteractive=True)
+
+    assert result["ok"] is True
+    assert result["restart_scheduled"] is True
+    assert result["launch_verification"]["skipped"] is True
+    assert verify_calls == []
+    assert saved[-1]["setup_status"] == "setup"
+
+
 def test_setup_failure_rolls_back_plugin_owned_state(monkeypatch, tmp_path):
     cloakbrowser = types.ModuleType("cloakbrowser")
     cloakbrowser.ensure_binary = lambda: "/bin/cloakbrowser"

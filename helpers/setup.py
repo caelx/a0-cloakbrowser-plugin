@@ -98,8 +98,34 @@ def setup_plugin(*, noninteractive: bool = False, skip_system_deps: bool = False
         save_manifest(manifest)
         lifecycle = reconcile_after_setup(cfg, source_patch)
         manifest["lifecycle"] = lifecycle
+        restart = lifecycle.get("agent_zero_restart") or {}
+        if restart.get("scheduled"):
+            launch_verification = {
+                "ok": False,
+                "skipped": True,
+                "reason": "agent_zero_restart_scheduled",
+                "message": restart.get("message", "Agent Zero restart scheduled after Execute returns."),
+            }
+            manifest["launch_verification"] = launch_verification
+            mark_setup(manifest)
+            save_manifest(manifest)
+            return {
+                "ok": True,
+                "system": system_result,
+                "python": python_result,
+                "display": display_result,
+                "extensions_installed": extension_installs,
+                "extension_actions": manifest.get("extension_actions", []),
+                "active_extension_paths": active_paths,
+                "extension_reconciliation": extension_validation,
+                "runtime_patch_validation": runtime_validation,
+                "launch_verification": launch_verification,
+                "lifecycle": lifecycle,
+                "restart_scheduled": True,
+                "restart_message": restart.get("message", ""),
+                "manifest": manifest,
+            }
         if lifecycle.get("restart_required"):
-            restart = lifecycle.get("agent_zero_restart") or {}
             reason = restart.get("reason") or "agent_zero_restart_required"
             raise RuntimeError(f"Agent Zero restart required after runtime patch: {reason}")
         save_manifest(manifest)

@@ -106,15 +106,16 @@ def main(argv: list[str] | None = None) -> int:
         )
         finished = dt.datetime.now(dt.timezone.utc)
         status = collect_status()
+        readiness = setup_readiness(status, setup_result=result)
         payload = {
-            "ok": bool(result.get("ok")) and setup_readiness(status)["ok"],
+            "ok": bool(result.get("ok")) and (readiness["ok"] or readiness.get("restart_scheduled")),
             "command": args.command,
             "started": _iso(started),
             "finished": _iso(finished),
             "elapsed_seconds": round(time.monotonic() - monotonic_start, 2),
             "setup": result,
             "status": status,
-            "readiness": setup_readiness(status),
+            "readiness": readiness,
             **_lifecycle_state(),
         }
         _print_result(json.dumps(payload, indent=2, sort_keys=True) if args.json else format_setup(payload))
@@ -130,7 +131,11 @@ def main(argv: list[str] | None = None) -> int:
     return 2
 
 
-def setup_readiness(status: dict[str, Any]) -> dict[str, Any]:
+def setup_readiness(
+    status: dict[str, Any],
+    *,
+    setup_result: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     invariants = status.get("invariants") or {}
     checks = {
         "setup_complete": bool(status.get("setup", {}).get("installed")),
@@ -144,7 +149,14 @@ def setup_readiness(status: dict[str, Any]) -> dict[str, Any]:
         display = status.get("display", {})
         checks["display_usable"] = bool(display.get("usable_current") or display.get("usable_configured"))
     failed = [name for name, ok in checks.items() if not ok]
-    return {"ok": not failed, "checks": checks, "failed": failed}
+    restart_scheduled = bool((setup_result or {}).get("restart_scheduled"))
+    return {
+        "ok": not failed,
+        "checks": checks,
+        "failed": failed,
+        "restart_scheduled": restart_scheduled,
+        "restart_message": (setup_result or {}).get("restart_message", ""),
+    }
 
 
 def _is_plugin_enabled() -> bool:
@@ -419,7 +431,10 @@ def _format_setup_lifecycle(lifecycle: dict[str, Any]) -> str:
     terminated = len(stopped.get("terminated") or [])
     killed = len(stopped.get("killed") or [])
     if restart.get("needed"):
-        restart_text = "restarted" if restart.get("restarted") else "restart required"
+        if restart.get("scheduled"):
+            restart_text = restart.get("message") or "restart scheduled"
+        else:
+            restart_text = "restarted" if restart.get("restarted") else "restart required"
     else:
         restart_text = "not needed"
     return (
@@ -430,6 +445,9 @@ def _format_setup_lifecycle(lifecycle: dict[str, Any]) -> str:
 
 
 def _format_readiness(readiness: dict[str, Any]) -> str:
+    if readiness.get("restart_scheduled"):
+        message = readiness.get("restart_message") or "Agent Zero restart scheduled after Execute returns."
+        return f"Final readiness: pending restart. {message}"
     if readiness["ok"]:
         return "Final readiness: ready. The Browser tool can use CloakBrowser."
     failed = ", ".join(readiness.get("failed") or ["unknown"])
