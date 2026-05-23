@@ -8,9 +8,10 @@ from typing import Any
 
 from .patcher import backup_file, sha256_file
 
-PATCH_VERSION = "13"
-PATCH_MARKER = "CLOAKBROWSER_SOURCE_PATCH_V13"
+PATCH_VERSION = "14"
+PATCH_MARKER = "CLOAKBROWSER_SOURCE_PATCH_V14"
 OLD_PATCH_MARKERS = (
+    "CLOAKBROWSER_SOURCE_PATCH_V13",
     "CLOAKBROWSER_SOURCE_PATCH_V12",
     "CLOAKBROWSER_SOURCE_PATCH_V11",
     "CLOAKBROWSER_SOURCE_PATCH_V10",
@@ -155,7 +156,8 @@ OPEN_PATCHED = """    async def open(self, url: str = "") -> dict[str, Any]:
         page = None
         if not self.pages:
             for candidate in list(getattr(self.context, "pages", [])):
-                if not getattr(candidate, "is_closed", lambda: False)():
+                candidate_url = str(getattr(candidate, "url", "") or "")
+                if candidate_url == "about:blank" and not getattr(candidate, "is_closed", lambda: False)():
                     page = candidate
                     break
         if page is None:
@@ -172,7 +174,8 @@ OPEN_PATCHED = """    async def open(self, url: str = "") -> dict[str, Any]:
                     await self.ensure_started()
                     if not self.pages:
                         for candidate in list(getattr(self.context, "pages", [])):
-                            if not getattr(candidate, "is_closed", lambda: False)():
+                            candidate_url = str(getattr(candidate, "url", "") or "")
+                            if candidate_url == "about:blank" and not getattr(candidate, "is_closed", lambda: False)():
                                 page = candidate
                                 break
                     if page is None:
@@ -184,7 +187,8 @@ OPEN_PATCHED = """    async def open(self, url: str = "") -> dict[str, Any]:
                             await self._discard_stale_context("Browser context could not open a new tab; restarting.")
                             await self.ensure_started()
                             for candidate in list(getattr(self.context, "pages", [])):
-                                if not getattr(candidate, "is_closed", lambda: False)():
+                                candidate_url = str(getattr(candidate, "url", "") or "")
+                                if candidate_url == "about:blank" and not getattr(candidate, "is_closed", lambda: False)():
                                     page = candidate
                                     break
                             if page is None:
@@ -198,7 +202,8 @@ OPEN_PATCHED_WITH_LIMIT = """    async def open(self, url: str = "") -> dict[str
         page = None
         if not self.pages:
             for candidate in list(getattr(self.context, "pages", [])):
-                if not getattr(candidate, "is_closed", lambda: False)():
+                candidate_url = str(getattr(candidate, "url", "") or "")
+                if candidate_url == "about:blank" and not getattr(candidate, "is_closed", lambda: False)():
                     page = candidate
                     break
         if page is None:
@@ -216,7 +221,8 @@ OPEN_PATCHED_WITH_LIMIT = """    async def open(self, url: str = "") -> dict[str
                     self._ensure_can_open_page()
                     if not self.pages:
                         for candidate in list(getattr(self.context, "pages", [])):
-                            if not getattr(candidate, "is_closed", lambda: False)():
+                            candidate_url = str(getattr(candidate, "url", "") or "")
+                            if candidate_url == "about:blank" and not getattr(candidate, "is_closed", lambda: False)():
                                 page = candidate
                                 break
                     if page is None:
@@ -229,7 +235,8 @@ OPEN_PATCHED_WITH_LIMIT = """    async def open(self, url: str = "") -> dict[str
                             await self.ensure_started()
                             self._ensure_can_open_page()
                             for candidate in list(getattr(self.context, "pages", [])):
-                                if not getattr(candidate, "is_closed", lambda: False)():
+                                candidate_url = str(getattr(candidate, "url", "") or "")
+                                if candidate_url == "about:blank" and not getattr(candidate, "is_closed", lambda: False)():
                                     page = candidate
                                     break
                             if page is None:

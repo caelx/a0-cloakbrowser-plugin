@@ -21,6 +21,7 @@ def test_patch_runtime_source_applies_current_patch_without_legacy_plugin_root(m
     assert "launch_persistent_context(" in text
     assert "Browser context could not open a new tab; restarting." in text
     assert "_cloakbrowser_open_restart_lock" in text
+    assert 'candidate_url == "about:blank"' in text
     assert "_cloakbrowser_expected_context_close" in text
     assert "gc.collect()" in text
     assert manifest["runtime_source_patch"]["target_path"] == str(runtime)
@@ -146,6 +147,7 @@ def test_patch_runtime_source_supports_current_agent_zero_runtime(monkeypatch, t
     assert "self._ensure_can_open_page()" in text
     assert "Browser context could not open a new tab; restarting." in text
     assert "_cloakbrowser_open_restart_lock" in text
+    assert 'candidate_url == "about:blank"' in text
     assert "_cloakbrowser_expected_context_close" in text
 
 

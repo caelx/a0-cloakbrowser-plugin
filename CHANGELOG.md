@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Bump plugin version to `1.3.4`.
+- Prevent the Agent Zero Browser open patch from reusing CloakBrowser extension
+  pages as normal browser tabs after extension startup or recovery.
 - Bump plugin version to `1.3.3`.
 - Launch CloakBrowser through its Patchright backend so Agent Zero Browser does
   not fall back to unpatched Playwright runtime behavior.

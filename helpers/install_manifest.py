@@ -10,7 +10,7 @@ from .config import manifest_path
 
 def empty_manifest() -> dict[str, Any]:
     return {
-        "plugin_version": "1.3.3",
+        "plugin_version": "1.3.4",
         "setup_status": "not_setup",
         "setup_timestamp": "",
         "agent_zero": {},
