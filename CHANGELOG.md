@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Bump plugin version to `1.3.8`.
+- Force setup/verify imports to use the same Agent Zero root selected for
+  source patching and drop stale cached `_browser` modules during that import.
 - Bump plugin version to `1.3.7`.
 - Remove duplicate enabled-state filtering from the injected Browser source
   bootstrap so the plugin runtime helper is the single source of truth for

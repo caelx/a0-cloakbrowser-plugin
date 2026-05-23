@@ -115,6 +115,29 @@ def test_agent_zero_import_context_uses_git_fallback_for_legacy_plugin_root(
         assert str(fallback) in sys.path
 
 
+def test_agent_zero_import_context_moves_selected_root_to_front_and_clears_browser_cache(
+    monkeypatch, tmp_path
+):
+    root = tmp_path / "git" / "agent-zero" / "usr" / "plugins" / "cloakbrowser"
+    root.mkdir(parents=True)
+    selected = tmp_path / "git" / "agent-zero"
+    other = tmp_path / "a0"
+    for candidate in (selected, other):
+        (candidate / "plugins" / "_browser").mkdir(parents=True)
+        (candidate / "helpers").mkdir(parents=True)
+        (candidate / "helpers" / "tool.py").write_text("", encoding="utf-8")
+    cached = types.ModuleType("plugins._browser.helpers.runtime")
+    monkeypatch.setitem(sys.modules, "plugins._browser.helpers.runtime", cached)
+    monkeypatch.setattr("helpers.config.plugin_dir", lambda: root)
+    monkeypatch.setattr(sys, "path", [str(other), str(selected), str(root)])
+
+    with runtime_patch._agent_zero_import_context():
+        assert sys.path[0] == str(selected)
+        assert "plugins._browser.helpers.runtime" not in sys.modules
+
+    assert sys.modules["plugins._browser.helpers.runtime"] is cached
+
+
 def test_shadow_dom_script_is_noop_and_restored(monkeypatch):
     install_fake_runtime(monkeypatch)
     monkeypatch.setattr(

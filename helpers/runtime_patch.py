@@ -90,6 +90,11 @@ def _agent_zero_import_context():
         for name, module in sys.modules.items()
         if name == "helpers" or name.startswith("helpers.")
     }
+    previous_browser_plugins = {
+        name: module
+        for name, module in sys.modules.items()
+        if name == "plugins._browser" or name.startswith("plugins._browser.")
+    }
     removed_entries: list[tuple[int, str]] = []
     removed_modules: dict[str, Any] = {}
     for name, module in list(sys.modules.items()):
@@ -105,7 +110,7 @@ def _agent_zero_import_context():
             continue
         removed_modules[name] = module
         sys.modules.pop(name, None)
-
+    selected_agent_zero_root = None
     for index, entry in reversed(list(enumerate(sys.path))):
         try:
             matches_root = Path(entry or ".").resolve() == root
@@ -120,10 +125,19 @@ def _agent_zero_import_context():
             (candidate / "plugins" / "_browser").is_dir()
             and (candidate / "helpers" / "tool.py").is_file()
         ):
+            selected_agent_zero_root = candidate
             candidate_str = str(candidate)
-            if candidate_str not in sys.path:
-                sys.path.insert(0, candidate_str)
+            sys.path[:] = [
+                entry
+                for entry in sys.path
+                if _resolved_path(entry) != _resolved_path(candidate_str)
+            ]
+            sys.path.insert(0, candidate_str)
             break
+    if selected_agent_zero_root is not None:
+        for name in list(sys.modules):
+            if name == "plugins._browser" or name.startswith("plugins._browser."):
+                sys.modules.pop(name, None)
 
     try:
         yield
@@ -132,4 +146,14 @@ def _agent_zero_import_context():
         for name in list(sys.modules):
             if name == "helpers" or name.startswith("helpers."):
                 sys.modules.pop(name, None)
+            if name == "plugins._browser" or name.startswith("plugins._browser."):
+                sys.modules.pop(name, None)
         sys.modules.update(previous_helpers)
+        sys.modules.update(previous_browser_plugins)
+
+
+def _resolved_path(entry: str) -> Path | None:
+    try:
+        return Path(entry or ".").resolve()
+    except Exception:
+        return None
