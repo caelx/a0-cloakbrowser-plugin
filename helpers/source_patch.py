@@ -8,9 +8,10 @@ from typing import Any
 
 from .patcher import backup_file, sha256_file
 
-PATCH_VERSION = "14"
-PATCH_MARKER = "CLOAKBROWSER_SOURCE_PATCH_V14"
+PATCH_VERSION = "15"
+PATCH_MARKER = "CLOAKBROWSER_SOURCE_PATCH_V15"
 OLD_PATCH_MARKERS = (
+    "CLOAKBROWSER_SOURCE_PATCH_V14",
     "CLOAKBROWSER_SOURCE_PATCH_V13",
     "CLOAKBROWSER_SOURCE_PATCH_V12",
     "CLOAKBROWSER_SOURCE_PATCH_V11",
@@ -34,29 +35,6 @@ def _cloakbrowser_source_runtime():
         import importlib.util as _cloakbrowser_importlib_util
         from helpers import plugins as _cloakbrowser_plugins
 
-        _cloakbrowser_enabled = _cloakbrowser_plugins.get_enabled_plugins(None)
-        if _cloakbrowser_enabled is not None:
-            _cloakbrowser_found = False
-            for _cloakbrowser_item in _cloakbrowser_enabled:
-                if _cloakbrowser_item == "cloakbrowser":
-                    _cloakbrowser_found = True
-                    break
-                if isinstance(_cloakbrowser_item, dict):
-                    _cloakbrowser_name = (
-                        _cloakbrowser_item.get("name")
-                        or _cloakbrowser_item.get("id")
-                        or _cloakbrowser_item.get("plugin_name")
-                    )
-                else:
-                    _cloakbrowser_name = (
-                        getattr(_cloakbrowser_item, "name", None)
-                        or getattr(_cloakbrowser_item, "id", None)
-                    )
-                if _cloakbrowser_name == "cloakbrowser":
-                    _cloakbrowser_found = True
-                    break
-            if not _cloakbrowser_found:
-                return None
         _cloakbrowser_dir = _cloakbrowser_plugins.find_plugin_dir("cloakbrowser")
         if not _cloakbrowser_dir:
             raise RuntimeError(

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Bump plugin version to `1.3.7`.
+- Remove duplicate enabled-state filtering from the injected Browser source
+  bootstrap so the plugin runtime helper is the single source of truth for
+  enabled versus disabled launch behavior.
 - Bump plugin version to `1.3.6`.
 - Enable the plugin in integration CI before setup so launch verification runs
   against the same enabled lifecycle used by Agent Zero.
