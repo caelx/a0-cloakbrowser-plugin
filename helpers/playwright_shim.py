@@ -188,6 +188,7 @@ def build_launch_overrides(
         "width": cfg["runtime"]["display_width"],
         "height": cfg["runtime"]["display_height"],
     }
+    launch_kwargs["backend"] = "patchright"
     if cfg["humanization"]["humanize"]:
         launch_kwargs["humanize"] = True
         launch_kwargs["human_preset"] = cfg["humanization"]["human_preset"]
@@ -207,6 +208,7 @@ def build_launch_overrides(
         "final_args": redact_args(final_args),
         "viewport": launch_kwargs["viewport"],
         "screen": launch_kwargs["screen"],
+        "backend": launch_kwargs["backend"],
         "effective_location": effective_location,
         "shared_memory": {
             "disable_dev_shm_usage": _disables_dev_shm_usage(launch_kwargs["ignore_default_args"]),

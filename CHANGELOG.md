@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Bump plugin version to `1.3.3`.
+- Launch CloakBrowser through its Patchright backend so Agent Zero Browser does
+  not fall back to unpatched Playwright runtime behavior.
+- Ensure setup/repair installs Patchright when it is missing while preserving
+  Agent Zero's existing Playwright install.
 - Bump plugin version to `1.3.2`.
 - Schedule Agent Zero `run_ui` restarts 10 seconds after Execute returns so the
   UI receives structured JSON before the server reloads.

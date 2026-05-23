@@ -59,11 +59,13 @@ def test_python_dependencies_preserve_existing_playwright(monkeypatch):
         lambda cmd, **kwargs: commands.append(cmd) or Result(),
     )
 
-    result = dependency_install.install_python_dependencies("cloakbrowser[geoip]>=0.3.28")
+    result = dependency_install.install_python_dependencies("cloakbrowser[geoip,patchright]>=0.3.28")
 
     assert result["ok"] is True
     assert "playwright" not in commands[0]
     assert "playwright_preserved" in result["actions"]
+    assert "patchright" not in commands[0]
+    assert "patchright_preserved" in result["actions"]
 
 
 def test_python_dependencies_install_playwright_only_when_missing(monkeypatch):
@@ -75,8 +77,31 @@ def test_python_dependencies_install_playwright_only_when_missing(monkeypatch):
         lambda cmd, **kwargs: commands.append(cmd) or Result(),
     )
 
-    result = dependency_install.install_python_dependencies("cloakbrowser[geoip]>=0.3.28")
+    result = dependency_install.install_python_dependencies("cloakbrowser[geoip,patchright]>=0.3.28")
 
     assert result["ok"] is True
-    assert commands[0][-1] == "playwright"
+    assert commands[0][-2:] == ["playwright", "patchright"]
     assert "playwright_install_missing" in result["actions"]
+    assert "patchright_install_missing" in result["actions"]
+
+
+def test_python_dependencies_install_patchright_when_missing(monkeypatch):
+    commands = []
+
+    def fake_find_spec(name):
+        return object() if name == "playwright" else None
+
+    monkeypatch.setattr(dependency_install.importlib.util, "find_spec", fake_find_spec)
+    monkeypatch.setattr(
+        dependency_install.subprocess,
+        "run",
+        lambda cmd, **kwargs: commands.append(cmd) or Result(),
+    )
+
+    result = dependency_install.install_python_dependencies("cloakbrowser[geoip,patchright]>=0.3.28")
+
+    assert result["ok"] is True
+    assert "playwright" not in commands[0]
+    assert commands[0][-1] == "patchright"
+    assert "playwright_preserved" in result["actions"]
+    assert "patchright_install_missing" in result["actions"]

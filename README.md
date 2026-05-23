@@ -58,9 +58,9 @@ python execute.py status --json
 
 Running `python execute.py` is the CLI equivalent of clicking Execute. Setup
 installs system browser/display/font packages when `apt-get` is available,
-installs or upgrades `cloakbrowser[geoip]` above the plugin's minimum version,
-preserves Agent Zero's Playwright unless it is missing, ensures the CloakBrowser binary,
-configures Xvfb, installs or updates configured extensions, and syncs extension
+installs or upgrades `cloakbrowser[geoip,patchright]` above the plugin's minimum
+version, preserves Agent Zero's Playwright unless it is missing, ensures the
+CloakBrowser binary, configures Xvfb, installs or updates configured extensions, and syncs extension
 paths into `_browser`. It then validates required patches and runs the Browser
 launch verification. Default output is human-readable; use `--json` for CI or
 scripts. `repair` reruns the same reconciliation over an existing install and

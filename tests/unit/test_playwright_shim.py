@@ -5,6 +5,7 @@ from types import ModuleType
 from helpers.playwright_shim import (
     _IN_CLOAK_LAUNCH,
     _STATE,
+    _cloak_launch_persistent_async,
     _cloak_ignore_default_args,
     _cloak_kwargs,
     _disables_dev_shm_usage,
@@ -152,7 +153,9 @@ def test_build_launch_overrides_uses_old_working_profile_defaults(monkeypatch):
 
     assert geoip_calls == []
     assert info["launcher"] == "cloakbrowser.launch_persistent_context_async"
+    assert info["backend"] == "patchright"
     assert launch_kwargs["headless"] is False
+    assert launch_kwargs["backend"] == "patchright"
     assert launch_kwargs["viewport"] == {"width": 1440, "height": 960}
     assert launch_kwargs["screen"] == {"width": 1440, "height": 960}
     assert launch_kwargs["humanize"] is True
@@ -359,12 +362,14 @@ def test_cloak_kwargs_strips_launch_wrapper_args():
         {
             "executable_path": "/opt/cloakbrowser/chrome",
             "ignore_default_args": ["--disable-dev-shm-usage"],
+            "backend": "patchright",
             "args": ["--fingerprint=12345"],
         }
     )
 
     assert "executable_path" not in cleaned
     assert "ignore_default_args" not in cleaned
+    assert cleaned["backend"] == "patchright"
 
 
 def test_cloak_ignore_default_args_patches_cloakbrowser_module(monkeypatch):
@@ -387,6 +392,45 @@ def test_cloak_ignore_default_args_patches_cloakbrowser_module(monkeypatch):
 
     assert browser_module.IGNORE_DEFAULT_ARGS == ["--enable-automation"]
     assert browser_module.get_default_stealth_args() == ["--no-sandbox", "--fingerprint=12345"]
+
+
+def test_cloak_launch_persistent_uses_cloakbrowser_persistent_context_with_patchright(monkeypatch):
+    calls = []
+    package = ModuleType("cloakbrowser")
+    browser_module = ModuleType("cloakbrowser.browser")
+    browser_module.IGNORE_DEFAULT_ARGS = []
+    package.browser = browser_module
+
+    async def launch_persistent_context_async(**kwargs):
+        calls.append(kwargs)
+        return "context"
+
+    package.launch_persistent_context_async = launch_persistent_context_async
+    monkeypatch.setitem(sys.modules, "cloakbrowser", package)
+    monkeypatch.setitem(sys.modules, "cloakbrowser.browser", browser_module)
+
+    result = asyncio.run(
+        _cloak_launch_persistent_async(
+            "/tmp/profile",
+            {
+                "executable_path": "/opt/cloakbrowser/chrome",
+                "ignore_default_args": ["--disable-dev-shm-usage"],
+                "backend": "patchright",
+                "humanize": True,
+                "human_preset": "default",
+            },
+        )
+    )
+
+    assert result == "context"
+    assert calls == [
+        {
+            "user_data_dir": "/tmp/profile",
+            "backend": "patchright",
+            "humanize": True,
+            "human_preset": "default",
+        }
+    ]
 
 
 def test_patched_async_launch_bypasses_when_inside_cloak_launch():
