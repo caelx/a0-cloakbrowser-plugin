@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import importlib.util
 
 PACKAGE_GROUPS = [
     (
@@ -89,7 +90,12 @@ def install_system_dependencies(noninteractive: bool = True) -> dict:
     }
 
 
-def install_python_dependencies(requirement: str | None = None) -> dict:
+def install_python_dependencies(
+    requirement: str | None = None,
+    *,
+    auto_update_cloakbrowser: bool = True,
+    repair_playwright: bool = True,
+) -> dict:
     import sys
     from .config import plugin_dir
 
@@ -98,13 +104,28 @@ def install_python_dependencies(requirement: str | None = None) -> dict:
         requirement = (
             requirements_path.read_text(encoding="utf-8").strip()
             if requirements_path.is_file()
-            else "cloakbrowser[geoip]==0.3.28"
+            else "cloakbrowser[geoip]>=0.3.28"
         )
-    cmd = [sys.executable, "-m", "pip", "install", "playwright", requirement]
+    cmd = [sys.executable, "-m", "pip", "install"]
+    actions = []
+    if auto_update_cloakbrowser:
+        cmd.append("--upgrade")
+        actions.append("cloakbrowser_upgrade")
+    else:
+        actions.append("cloakbrowser_install")
+    cmd.append(requirement)
+    playwright_installed = importlib.util.find_spec("playwright") is not None
+    if not playwright_installed and repair_playwright:
+        cmd.append("playwright")
+        actions.append("playwright_install_missing")
+    elif playwright_installed:
+        actions.append("playwright_preserved")
     result = subprocess.run(cmd, check=False, text=True, capture_output=True)
     return {
         "ok": result.returncode == 0,
         "command": cmd,
+        "actions": actions,
+        "playwright_installed": playwright_installed,
         "returncode": result.returncode,
         "stdout_tail": (result.stdout or "")[-4000:],
         "stderr_tail": (result.stderr or "")[-4000:],

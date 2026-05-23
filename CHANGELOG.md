@@ -2,10 +2,37 @@
 
 ## Unreleased
 
+- Bump plugin version to `1.3.1`.
+- Bump the Agent Zero `_browser` runtime source bootstrap to V12 so existing
+  installs replace the old plugin-root `sys.path` injection with a deterministic
+  file-based CloakBrowser import.
+- Detect live stock Playwright Chrome Browser sessions, stop them during
+  setup/repair, and restart Agent Zero through the actual `run_ui` supervisor
+  program when takeover is incomplete.
+- Remove the plugin-owned top-level `tools` package and keep plugin import
+  paths behind Agent Zero paths so upstream `tools.skills_tool` imports keep
+  working.
+- Add live Browser takeover diagnostics to status JSON.
 - Route current Agent Zero `/tmp/playwright/chromium-*` Browser launches
   through CloakBrowser.
 - Bump the Agent Zero `_browser` runtime source bootstrap to V10 and repair
   markerless partial runtime patches left by older installs.
+- Fail closed when CloakBrowser is enabled but launch cannot load the
+  CloakBrowser runtime hook or produce CloakBrowser launch kwargs.
+- Add strict runtime patch validation, extension reconciliation verification,
+  launch verification, and top-level status invariants before setup is marked
+  complete.
+- Add `execute.py verify --json` and run it from setup/repair and integration
+  CI without manual process-local patch calls.
+- Auto-update CloakBrowser above the minimum supported version while preserving
+  Agent Zero's Playwright unless it is missing.
+- Install managed extensions atomically and record provenance, tree hashes,
+  config hashes, and install timestamps.
+- Preserve the last known good setup state when repair fails after a previous
+  successful setup.
+- Stop stale Agent Zero-managed Chrome/CloakBrowser processes after setup and
+  restart Agent Zero through supervisor only when the `_browser` runtime source
+  patch changed during that Execute run.
 - Bump the Agent Zero `_browser` runtime source bootstrap to V9 and guard the
   current content-helper init script behind `disable_shadow_dom_init_patch`.
 - Add Agent Zero lifecycle aliases for install/update/reconcile/enable/disable

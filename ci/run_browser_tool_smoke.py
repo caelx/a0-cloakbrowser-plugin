@@ -46,11 +46,6 @@ async def main() -> int:
     bootstrap()
     from plugins._browser.helpers import runtime as browser_runtime
     from plugins._browser.tools.browser import Browser
-    from usr.plugins.cloakbrowser.helpers.playwright_shim import patch_playwright
-    from usr.plugins.cloakbrowser.helpers.runtime_patch import apply_runtime_patch
-
-    apply_runtime_patch()
-    patch_playwright()
 
     agent = FakeAgent("cloakbrowser-ci")
     tool = Browser(agent=agent, name="browser", method=None, args={}, message="", loop_data=None)

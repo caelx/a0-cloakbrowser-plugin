@@ -1,22 +1,30 @@
 from __future__ import annotations
 
-import sys
+import importlib.util
 from pathlib import Path
 
 from helpers.api import ApiHandler, Request
 
 _ROOT = Path(__file__).resolve().parents[1]
-if str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
+
+
+def _plugin_import(module: str):
+    spec = importlib.util.spec_from_file_location(
+        "_cloakbrowser_plugin_imports_api_extensions",
+        _ROOT / "plugin_imports.py",
+    )
+    if not spec or not spec.loader:
+        raise RuntimeError("CloakBrowser plugin_imports.py could not be loaded")
+    plugin_imports = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(plugin_imports)
+    return plugin_imports.plugin_import(module)
 
 
 class Extensions(ApiHandler):
     async def process(self, input: dict, request: Request) -> dict:
-        from plugin_imports import plugin_import
-
-        extension_helpers = plugin_import("helpers.extensions")
-        config_helpers = plugin_import("helpers.config")
-        manifest_helpers = plugin_import("helpers.install_manifest")
+        extension_helpers = _plugin_import("helpers.extensions")
+        config_helpers = _plugin_import("helpers.config")
+        manifest_helpers = _plugin_import("helpers.install_manifest")
 
         action = str(input.get("action") or "list").strip().lower()
         cfg = config_helpers.get_config()

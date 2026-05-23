@@ -1,13 +1,13 @@
 [project]
 name = "a0-cloakbrowser-plugin"
-version = "1.2.1"
+version = "1.3.1"
 description = "CloakBrowser-backed Agent Zero Browser overlay plugin"
 requires-python = ">=3.11"
 dependencies = []
 
 [dependency-groups]
 dev = [
-    "cloakbrowser[geoip]==0.3.28",
+    "cloakbrowser[geoip]>=0.3.28",
     "pytest==8.3.4",
     "ruff==0.8.4",
 ]

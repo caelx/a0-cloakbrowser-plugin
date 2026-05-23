@@ -10,7 +10,7 @@ runtime:
   viewport_width: 1440
   viewport_height: 960
   cloakbrowser_cache_dir: "/opt/cloakbrowser"
-  cloakbrowser_auto_update: false
+  cloakbrowser_auto_update: true
 
 humanization:
   humanize: true

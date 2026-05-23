@@ -27,6 +27,7 @@ def main(argv: list[str] | None = None) -> int:
             "setup",
             "update",
             "status",
+            "verify",
             "repair",
             "enable",
             "disable",
@@ -50,6 +51,17 @@ def main(argv: list[str] | None = None) -> int:
             status.update(_lifecycle_state())
         _print_result(status if args.json else format_status(status))
         return 0
+    if args.command == "verify":
+        from plugin_imports import plugin_import
+
+        verify_browser_launch = plugin_import("helpers.verify").verify_browser_launch
+
+        try:
+            result = verify_browser_launch()
+        except Exception as exc:
+            result = {"ok": False, "error": str(exc)}
+        _print_result(json.dumps(result, indent=2, sort_keys=True) if args.json else format_verify(result))
+        return 0 if result.get("ok") else 1
     if args.command in {"enable", "disable"}:
         from plugin_imports import plugin_import
 
@@ -119,10 +131,14 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def setup_readiness(status: dict[str, Any]) -> dict[str, Any]:
+    invariants = status.get("invariants") or {}
     checks = {
         "setup_complete": bool(status.get("setup", {}).get("installed")),
         "cloakbrowser_installed": bool(status.get("cloakbrowser", {}).get("installed")),
         "upstream_browser_available": bool(status.get("browser", {}).get("upstream_available")),
+        "source_patch_current": bool(invariants.get("source_patch_current")),
+        "extension_config_reconciled": bool(invariants.get("extension_config_reconciled")),
+        "last_launch_used_cloakbrowser": bool(invariants.get("last_launch_used_cloakbrowser")),
     }
     if status.get("config", {}).get("runtime", {}).get("headed"):
         display = status.get("display", {})
@@ -240,6 +256,7 @@ def format_setup(payload: dict[str, Any]) -> str:
         _format_display(setup.get("display", {}), status.get("display", {})),
         _format_effective_location(status.get("effective_location", {})),
         _format_extensions(setup.get("extension_actions") or setup.get("manifest", {}).get("extension_actions", []), status),
+        _format_setup_lifecycle(setup.get("lifecycle") or setup.get("manifest", {}).get("lifecycle", {})),
         "",
         _format_readiness(readiness),
     ]
@@ -259,7 +276,9 @@ def format_status(status: dict[str, Any]) -> str:
             _format_cloakbrowser(status.get("cloakbrowser", {}), status.get("config", {})),
             _format_display({}, status.get("display", {})),
             _format_effective_location(status.get("effective_location", {})),
+            _format_patch_status(status),
             _format_extensions([], status),
+            _format_last_launch(status),
             "",
             _format_readiness(readiness),
         ]
@@ -290,6 +309,12 @@ def format_lifecycle(payload: dict[str, Any]) -> str:
             format_status(status),
         ]
     )
+
+
+def format_verify(result: dict[str, Any]) -> str:
+    if result.get("ok"):
+        return "CloakBrowser verification: ready"
+    return f"CloakBrowser verification failed: {result.get('error') or ', '.join(result.get('failed') or ['unknown'])}"
 
 
 def _format_system_dependencies(system: dict[str, Any]) -> str:
@@ -362,7 +387,46 @@ def _format_extensions(actions: list[dict[str, Any]], status: dict[str, Any]) ->
         lines.append(f"- {item.get('name') or item.get('key')}: {item.get('action')}; {installed}; {enabled}")
     active_paths = status.get("extensions", {}).get("active_paths") or []
     lines.append(f"Active extension paths synced: {len(active_paths)}")
+    reconciliation = status.get("extension_reconciliation") or {}
+    if reconciliation:
+        lines.append("Reconciliation: " + ("ready" if reconciliation.get("ok") else "failed"))
     return "\n".join(lines)
+
+
+def _format_patch_status(status: dict[str, Any]) -> str:
+    validation = status.get("runtime_patch_validation") or {}
+    if not validation:
+        return "Required patches: not checked"
+    if validation.get("ok"):
+        return "Required patches: ready"
+    return "Required patches: failed (" + ", ".join(validation.get("failed") or ["unknown"]) + ")"
+
+
+def _format_last_launch(status: dict[str, Any]) -> str:
+    last_launch = status.get("last_launch") or {}
+    if not last_launch:
+        return "Last launch: not recorded"
+    backend = "CloakBrowser" if "cloakbrowser" in str(last_launch.get("binary", "")).lower() else "unknown"
+    return f"Last launch: {backend}"
+
+
+def _format_setup_lifecycle(lifecycle: dict[str, Any]) -> str:
+    if not lifecycle:
+        return "Lifecycle: not recorded"
+    stopped = lifecycle.get("browser_processes_stopped") or {}
+    restart = lifecycle.get("agent_zero_restart") or {}
+    matched = len(stopped.get("matched") or [])
+    terminated = len(stopped.get("terminated") or [])
+    killed = len(stopped.get("killed") or [])
+    if restart.get("needed"):
+        restart_text = "restarted" if restart.get("restarted") else "restart required"
+    else:
+        restart_text = "not needed"
+    return (
+        "Lifecycle: "
+        f"stale browser processes matched={matched}, terminated={terminated}, killed={killed}; "
+        f"Agent Zero restart={restart_text}"
+    )
 
 
 def _format_readiness(readiness: dict[str, Any]) -> str:

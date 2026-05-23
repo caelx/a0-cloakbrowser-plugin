@@ -10,6 +10,8 @@ import zipfile
 from pathlib import Path
 from typing import Any
 
+from .extension_install import atomic_install_extension, extension_metadata_with_hashes
+
 EXTENSION_ID_RE = re.compile(r"^[a-p]{32}$")
 CHROME_VERSION_RE = re.compile(r"(\d+(?:\.\d+){0,3})")
 DEFAULT_CHROME_PRODVERSION = "140.0.0.0"
@@ -38,9 +40,12 @@ def install_chrome_web_store_extension(extension_id: str, target_dir: Path) -> d
         safe_extract_zip(payload_path, extracted_path)
         if not (extracted_path / "manifest.json").is_file():
             raise ValueError("Downloaded extension did not contain manifest.json")
-        _replace_dir(extracted_path, target_dir)
-
-    return extension_metadata(target_dir, source=f"chrome-web-store:{extension_id}")
+        return atomic_install_extension(
+            extracted_path,
+            target_dir,
+            source_name=f"chrome-web-store:{extension_id}",
+            extra={"extension_id": extension_id},
+        )
 
 
 def crx_zip_payload(data: bytes) -> bytes:
@@ -81,19 +86,7 @@ def safe_extract_zip(archive_path: Path, target_dir: Path) -> None:
 
 
 def extension_metadata(extension_dir: Path, *, source: str = "") -> dict[str, Any]:
-    import json
-
-    manifest_path = extension_dir / "manifest.json"
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    return {
-        "source": source,
-        "path": str(extension_dir),
-        "manifest_name": manifest.get("name") or "",
-        "manifest_version": manifest.get("version") or "",
-        "manifest_manifest_version": manifest.get("manifest_version") or "",
-        "permissions": manifest.get("permissions") or [],
-        "host_permissions": manifest.get("host_permissions") or [],
-    }
+    return extension_metadata_with_hashes(extension_dir, source=source)
 
 
 def _download_crx(extension_id: str, archive_path: Path) -> None:
@@ -129,15 +122,3 @@ def _detect_chrome_prodversion() -> str:
             parts = match.group(1).split(".")
             return ".".join((parts + ["0", "0", "0", "0"])[:4])
     return DEFAULT_CHROME_PRODVERSION
-
-
-def _replace_dir(source: Path, target: Path) -> None:
-    tmp_target = target.with_name(f".{target.name}.tmp")
-    if tmp_target.exists():
-        shutil.rmtree(tmp_target)
-    if target.exists():
-        shutil.copytree(target, tmp_target)
-        shutil.rmtree(target)
-        shutil.rmtree(tmp_target)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copytree(source, target)

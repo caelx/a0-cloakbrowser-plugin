@@ -1,11 +1,21 @@
 from __future__ import annotations
 
-import sys
+import importlib.util
 from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parent
-if str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
+
+
+def _plugin_import(module: str):
+    spec = importlib.util.spec_from_file_location(
+        "_cloakbrowser_plugin_imports_hooks",
+        _ROOT / "plugin_imports.py",
+    )
+    if not spec or not spec.loader:
+        raise RuntimeError("CloakBrowser plugin_imports.py could not be loaded")
+    plugin_imports = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(plugin_imports)
+    return plugin_imports.plugin_import(module)
 
 
 def install():
@@ -19,19 +29,13 @@ def install():
 
 
 def uninstall():
-    from plugin_imports import plugin_import
-
-    result = plugin_import("helpers.uninstall").uninstall(remove_extensions=True)
+    result = _plugin_import("helpers.uninstall").uninstall(remove_extensions=True)
     return bool(result.get("ok")) if isinstance(result, dict) else bool(result)
 
 
 def get_plugin_config(default=None, **kwargs):
-    from plugin_imports import plugin_import
-
-    return plugin_import("helpers.config").normalize_config(default if isinstance(default, dict) else {})
+    return _plugin_import("helpers.config").normalize_config(default if isinstance(default, dict) else {})
 
 
 def save_plugin_config(settings=None, **kwargs):
-    from plugin_imports import plugin_import
-
-    return plugin_import("helpers.config").normalize_config(settings if isinstance(settings, dict) else {})
+    return _plugin_import("helpers.config").normalize_config(settings if isinstance(settings, dict) else {})

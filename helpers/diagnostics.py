@@ -9,15 +9,26 @@ from typing import Any
 from .config import get_config, redacted_config
 from .extensions import active_extension_paths, list_extension_status
 from .install_manifest import load_manifest
+from .lifecycle import inspect_live_browser_state
 from .playwright_shim import status as shim_status
 from .runtime_patch import status as runtime_patch_status
+from .validation import collect_invariants, validate_runtime_patch
+from .extensions import verify_extension_reconciliation
 from .xvfb import display_usable
 
 
 def collect_status(config: dict[str, Any] | None = None) -> dict[str, Any]:
     cfg = get_config(config)
     manifest = load_manifest()
-    return {
+    try:
+        runtime_validation = validate_runtime_patch(manifest)
+    except Exception as exc:
+        runtime_validation = {"ok": False, "failed": ["runtime_patch_validation"], "error": str(exc)}
+    try:
+        extension_validation = verify_extension_reconciliation(cfg)
+    except Exception as exc:
+        extension_validation = {"ok": False, "failed": ["extension_reconciliation"], "error": str(exc)}
+    status = {
         "ok": True,
         "plugin": "cloakbrowser",
         "config": redacted_config(cfg),
@@ -61,12 +72,20 @@ def collect_status(config: dict[str, Any] | None = None) -> dict[str, Any]:
             "arg_filtering": "always_on",
         },
         "effective_location": manifest.get("effective_location", {}),
+        "last_launch": manifest.get("last_launch", {}),
+        "runtime_patch_validation": runtime_validation,
+        "extension_reconciliation": extension_validation,
+        "launch_verification": manifest.get("launch_verification", {}),
+        "live_browser_state": inspect_live_browser_state(cfg),
         "extensions": {
             "active_paths": active_extension_paths(cfg),
             "items": list_extension_status(cfg),
         },
         "browser": browser_status(),
     }
+    status["invariants"] = collect_invariants(status)
+    status["ok"] = all(status["invariants"].values())
+    return status
 
 
 def cloakbrowser_status() -> dict[str, Any]:

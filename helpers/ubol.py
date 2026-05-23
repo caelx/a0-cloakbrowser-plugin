@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
 import tarfile
 import tempfile
 import urllib.request
 from pathlib import Path
 from typing import Any
+
+from .extension_install import atomic_install_extension
 
 REPO_TAGS_URL = "https://api.github.com/repos/uBlockOrigin/uBOL-home/tags?per_page=1"
 ARCHIVE_URL = "https://github.com/uBlockOrigin/uBOL-home/archive/refs/tags/{tag}.tar.gz"
@@ -30,9 +31,14 @@ def install_ublock_origin_lite(target_dir: Path, config: dict[str, Any]) -> dict
         source_extension = children[0] / "chromium"
         if not (source_extension / "manifest.json").is_file():
             raise ValueError("uBOL Chromium extension is missing manifest.json")
-        _copy_replace(source_extension, target_dir)
-        _patch_defaults(target_dir, config)
-    return _metadata(target_dir, tag)
+        _patch_defaults(source_extension, config)
+        return atomic_install_extension(
+            source_extension,
+            target_dir,
+            source_name="uBlockOrigin/uBOL-home",
+            config=config,
+            extra={"tag": tag},
+        )
 
 
 def _latest_tag() -> str:
@@ -71,8 +77,8 @@ def _safe_extract_tar(archive: tarfile.TarFile, destination: Path) -> None:
         archive.extractall(destination)
 
 
-def _patch_defaults(target_dir: Path, config: dict[str, Any]) -> None:
-    manifest_path = target_dir / "manifest.json"
+def _patch_defaults(extension_dir: Path, config: dict[str, Any]) -> None:
+    manifest_path = extension_dir / "manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     manifest.pop("key", None)
     rulesets = manifest.get("declarative_net_request", {}).get("rule_resources", [])
@@ -85,8 +91,8 @@ def _patch_defaults(target_dir: Path, config: dict[str, Any]) -> None:
         ruleset["enabled"] = ruleset.get("id") in enabled_ids
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
 
-    config_path = target_dir / "js" / "config.js"
-    mode_path = target_dir / "js" / "mode-manager.js"
+    config_path = extension_dir / "js" / "config.js"
+    mode_path = extension_dir / "js" / "mode-manager.js"
     if config_path.is_file():
         text = config_path.read_text(encoding="utf-8")
         enabled = "[\n" + "".join(f"        '{item}',\n" for item in enabled_ids if item in available) + "    ]"
@@ -100,28 +106,14 @@ def _patch_defaults(target_dir: Path, config: dict[str, Any]) -> None:
         config_path.write_text(text, encoding="utf-8")
     if mode_path.is_file() and config.get("filtering_mode") == "complete":
         text = mode_path.read_text(encoding="utf-8")
-        text = text.replace("userModes = { optimal: [ 'all-urls' ] },", "userModes = { complete: [ 'all-urls' ] },", 1)
+        text = text.replace(
+            "userModes = { optimal: [ 'all-urls' ] },",
+            "userModes = { complete: [ 'all-urls' ] },",
+            1,
+        )
         text = text.replace("complete: [],", "complete: [ 'all-urls' ],", 1)
         text = text.replace("optimal: [ 'all-urls' ],", "optimal: [],", 1)
         mode_path.write_text(text, encoding="utf-8")
-
-
-def _copy_replace(source: Path, target: Path) -> None:
-    if target.exists():
-        shutil.rmtree(target)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copytree(source, target)
-
-
-def _metadata(target_dir: Path, tag: str) -> dict[str, Any]:
-    manifest = json.loads((target_dir / "manifest.json").read_text(encoding="utf-8"))
-    return {
-        "source": "uBlockOrigin/uBOL-home",
-        "tag": tag,
-        "path": str(target_dir),
-        "manifest_name": manifest.get("name") or "",
-        "manifest_version": manifest.get("version") or "",
-    }
 
 
 def _github_headers(*, accept: str | None = None) -> dict[str, str]:

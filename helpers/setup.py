@@ -12,10 +12,14 @@ from .extensions import (
     install_configured_extensions,
     managed_extension_paths,
     sync_browser_extension_paths,
+    verify_extension_reconciliation,
 )
 from .install_manifest import load_manifest, mark_setup, record_warning, save_manifest
+from .lifecycle import reconcile_after_setup
 from .seed_playwright import ensure_masquerade, remove_masquerade
 from .source_patch import patch_runtime_source
+from .validation import validate_runtime_patch
+from .verify import verify_browser_launch
 from .xvfb import ensure_display, remove_direct_xvfb_if_owned, remove_supervisor_config_if_owned
 
 
@@ -34,10 +38,13 @@ def setup_plugin(*, noninteractive: bool = False, skip_system_deps: bool = False
                 f"System dependency install incomplete: {system_result.get('reason') or system_result.get('stderr_tail', '')[:200]}",
             )
 
-    python_result = install_python_dependencies()
+    python_result = install_python_dependencies(
+        auto_update_cloakbrowser=cfg.get("runtime", {}).get("cloakbrowser_auto_update", True),
+        repair_playwright=True,
+    )
     if not python_result.get("ok"):
         record_warning(manifest, "Python dependency install failed")
-        manifest["setup_status"] = "failed"
+        _mark_setup_failure(manifest, previous_manifest=previous_manifest, error="Python dependency install failed")
         save_manifest(manifest)
         return {"ok": False, "system": system_result, "python": python_result, "manifest": manifest}
 
@@ -59,7 +66,7 @@ def setup_plugin(*, noninteractive: bool = False, skip_system_deps: bool = False
         }
     except Exception as exc:
         record_warning(manifest, f"CloakBrowser binary setup failed: {exc}")
-        manifest["setup_status"] = "failed"
+        _mark_setup_failure(manifest, previous_manifest=previous_manifest, error=str(exc))
         save_manifest(manifest)
         return {
             "ok": False,
@@ -73,7 +80,33 @@ def setup_plugin(*, noninteractive: bool = False, skip_system_deps: bool = False
         display_result = ensure_display(cfg, manifest)
         extension_installs = install_configured_extensions(cfg, manifest)
         active_paths = sync_browser_extension_paths(cfg)
+        extension_validation = verify_extension_reconciliation(cfg)
+        if not extension_validation.get("ok"):
+            raise RuntimeError(
+                "Extension reconciliation failed: "
+                + ", ".join(extension_validation.get("failed") or ["unknown"])
+            )
         source_patch = patch_runtime_source(manifest)
+        runtime_validation = validate_runtime_patch(manifest)
+        if not runtime_validation.get("ok"):
+            raise RuntimeError(
+                "Required runtime patch failed: "
+                + ", ".join(runtime_validation.get("failed") or ["unknown"])
+            )
+        manifest["extension_reconciliation"] = extension_validation
+        manifest["runtime_patch_validation"] = runtime_validation
+        save_manifest(manifest)
+        lifecycle = reconcile_after_setup(cfg, source_patch)
+        manifest["lifecycle"] = lifecycle
+        if lifecycle.get("restart_required"):
+            restart = lifecycle.get("agent_zero_restart") or {}
+            reason = restart.get("reason") or "agent_zero_restart_required"
+            raise RuntimeError(f"Agent Zero restart required after runtime patch: {reason}")
+        save_manifest(manifest)
+        launch_verification = verify_browser_launch()
+        manifest = load_manifest()
+        manifest["lifecycle"] = lifecycle
+        manifest["launch_verification"] = launch_verification
     except Exception as exc:
         record_warning(manifest, f"Setup failed after dependency install: {exc}")
         rollback = _rollback_failed_setup(manifest, previous_manifest=previous_manifest)
@@ -99,7 +132,6 @@ def setup_plugin(*, noninteractive: bool = False, skip_system_deps: bool = False
         "applied_in_setup": False,
         "applies_when": "Browser tool execution or smoke test process",
     }
-
     mark_setup(manifest)
     save_manifest(manifest)
     return {
@@ -112,6 +144,10 @@ def setup_plugin(*, noninteractive: bool = False, skip_system_deps: bool = False
         "active_extension_paths": active_paths,
         "runtime_patch": runtime_patch,
         "playwright_shim": shim_patch,
+        "extension_reconciliation": extension_validation,
+        "runtime_patch_validation": runtime_validation,
+        "launch_verification": launch_verification,
+        "lifecycle": lifecycle,
         "manifest": manifest,
     }
 
@@ -148,6 +184,26 @@ def _rollback_failed_setup(
         "preserved_prior_setup": preserve_prior_setup,
         "shared_dependencies_removed": False,
     }
-    manifest["setup_status"] = "failed"
+    _mark_setup_failure(
+        manifest,
+        previous_manifest=previous_manifest,
+        error=str(manifest.get("warnings", ["setup failed"])[-1]),
+    )
     manifest["rollback"] = rollback
     return rollback
+
+
+def _mark_setup_failure(
+    manifest: dict[str, Any],
+    *,
+    previous_manifest: dict[str, Any] | None,
+    error: str,
+) -> None:
+    if (previous_manifest or {}).get("setup_status") == "setup":
+        manifest["setup_status"] = "setup"
+        manifest["last_repair_status"] = "failed"
+        manifest["last_repair_error"] = error
+        return
+    manifest["setup_status"] = "failed"
+    manifest["last_repair_status"] = "failed"
+    manifest["last_repair_error"] = error

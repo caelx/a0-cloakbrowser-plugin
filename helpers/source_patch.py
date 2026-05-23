@@ -8,18 +8,20 @@ from typing import Any
 
 from .patcher import backup_file, sha256_file
 
-PATCH_VERSION = "10"
-PATCH_MARKER = "CLOAKBROWSER_SOURCE_PATCH_V10"
+PATCH_VERSION = "12"
+PATCH_MARKER = "CLOAKBROWSER_SOURCE_PATCH_V12"
 OLD_PATCH_MARKERS = (
-    "CLOAKBROWSER_SOURCE_PATCH_V1",
-    "CLOAKBROWSER_SOURCE_PATCH_V2",
-    "CLOAKBROWSER_SOURCE_PATCH_V3",
-    "CLOAKBROWSER_SOURCE_PATCH_V4",
-    "CLOAKBROWSER_SOURCE_PATCH_V5",
-    "CLOAKBROWSER_SOURCE_PATCH_V6",
-    "CLOAKBROWSER_SOURCE_PATCH_V7",
-    "CLOAKBROWSER_SOURCE_PATCH_V8",
+    "CLOAKBROWSER_SOURCE_PATCH_V11",
+    "CLOAKBROWSER_SOURCE_PATCH_V10",
     "CLOAKBROWSER_SOURCE_PATCH_V9",
+    "CLOAKBROWSER_SOURCE_PATCH_V8",
+    "CLOAKBROWSER_SOURCE_PATCH_V7",
+    "CLOAKBROWSER_SOURCE_PATCH_V6",
+    "CLOAKBROWSER_SOURCE_PATCH_V5",
+    "CLOAKBROWSER_SOURCE_PATCH_V4",
+    "CLOAKBROWSER_SOURCE_PATCH_V3",
+    "CLOAKBROWSER_SOURCE_PATCH_V2",
+    "CLOAKBROWSER_SOURCE_PATCH_V1",
 )
 
 SOURCE_RUNTIME_HELPER = f"""
@@ -27,7 +29,7 @@ SOURCE_RUNTIME_HELPER = f"""
 # {PATCH_MARKER}: start
 def _cloakbrowser_source_runtime():
     try:
-        import sys as _cloakbrowser_sys
+        import importlib.util as _cloakbrowser_importlib_util
         from helpers import plugins as _cloakbrowser_plugins
 
         _cloakbrowser_enabled = _cloakbrowser_plugins.get_enabled_plugins(None)
@@ -55,18 +57,27 @@ def _cloakbrowser_source_runtime():
                 return None
         _cloakbrowser_dir = _cloakbrowser_plugins.find_plugin_dir("cloakbrowser")
         if not _cloakbrowser_dir:
-            return None
-        if _cloakbrowser_dir not in _cloakbrowser_sys.path:
-            _cloakbrowser_sys.path.insert(0, _cloakbrowser_dir)
-        from plugin_imports import plugin_import as _cloakbrowser_plugin_import
+            raise RuntimeError(
+                "CloakBrowser is enabled, but the plugin directory was not found. "
+                "Run: python execute.py repair --noninteractive"
+            )
+        _cloakbrowser_import_path = _cloakbrowser_dir + "/plugin_imports.py"
+        _cloakbrowser_spec = _cloakbrowser_importlib_util.spec_from_file_location(
+            "_cloakbrowser_plugin_imports",
+            _cloakbrowser_import_path,
+        )
+        if not _cloakbrowser_spec or not _cloakbrowser_spec.loader:
+            raise RuntimeError("CloakBrowser plugin_imports.py could not be loaded")
+        _cloakbrowser_imports = _cloakbrowser_importlib_util.module_from_spec(_cloakbrowser_spec)
+        _cloakbrowser_spec.loader.exec_module(_cloakbrowser_imports)
+        _cloakbrowser_plugin_import = _cloakbrowser_imports.plugin_import
 
         return _cloakbrowser_plugin_import("helpers.source_runtime")
     except Exception as exc:
-        try:
-            PrintStyle.warning(f"CloakBrowser source bootstrap unavailable: {{exc}}")
-        except Exception:
-            pass
-        return None
+        raise RuntimeError(
+            "CloakBrowser is enabled, but the launch hook is unavailable. "
+            "Run: python execute.py repair --noninteractive"
+        ) from exc
 # {PATCH_MARKER}: end
 """
 
@@ -425,12 +436,19 @@ def patch_runtime_source(manifest: dict[str, Any]) -> dict[str, Any]:
     original_text = target.read_text(encoding="utf-8")
     if PATCH_MARKER in original_text:
         previous = manifest.get("runtime_source_patch") or {}
+        original_hash = previous.get("original_hash", "")
+        backup_path = previous.get("backup_path", "")
+        if backup_path and not original_hash and Path(str(backup_path)).is_file():
+            original_hash = sha256_file(Path(str(backup_path)))
+        if not backup_path or not Path(str(backup_path)).is_file():
+            backup_path = str(_write_reconstructed_backup(target, original_text))
+            original_hash = sha256_file(Path(backup_path))
         result = {
             "applied": True,
             "already_patched": True,
             "target_path": str(target),
-            "backup_path": previous.get("backup_path", ""),
-            "original_hash": previous.get("original_hash", ""),
+            "backup_path": backup_path,
+            "original_hash": original_hash,
             "patched_hash": sha256_file(target),
             "patch_version": PATCH_VERSION,
             "timestamp": _utc_now(),
@@ -527,7 +545,7 @@ def patch_runtime_source_text(text: str) -> str:
 def upgrade_runtime_source_text(text: str) -> str:
     patched = text
     for old_marker in OLD_PATCH_MARKERS:
-        patched = patched.replace(old_marker, PATCH_MARKER)
+        patched = patched.replace(f"{old_marker}:", f"{PATCH_MARKER}:")
     patched = _ensure_helper_block(patched)
     patched = _replace_helper_block(patched)
     patched = _replace_first_matching_once(
@@ -586,6 +604,31 @@ def upgrade_runtime_source_text(text: str) -> str:
     return patched
 
 
+def unpatch_runtime_source_text(text: str) -> str:
+    restored = _remove_helper_block(text)
+    restored = _replace_once(restored, LAUNCH_PATCHED, LAUNCH_ORIGINAL)
+    restored = _replace_first_matching_pair_once(
+        restored,
+        (
+            (SHADOW_PATCHED, SHADOW_ORIGINAL),
+            (CONTENT_HELPER_PATCHED, CONTENT_HELPER_ORIGINAL),
+        ),
+    )
+    restored = _replace_once(restored, START_PAGES_PATCHED, START_PAGES_ORIGINAL)
+    restored = _replace_first_matching_pair_once(
+        restored,
+        (
+            (OPEN_PATCHED_WITH_LIMIT, OPEN_ORIGINAL_WITH_LIMIT),
+            (OPEN_PATCHED, OPEN_ORIGINAL),
+        ),
+    )
+    restored = _replace_once(restored, CLOSE_BROWSER_PATCHED, CLOSE_BROWSER_ORIGINAL)
+    restored = _replace_once(restored, CLOSE_ALL_PATCHED, CLOSE_ALL_ORIGINAL)
+    restored = _replace_once(restored, CONTEXT_CLOSED_PATCHED, CONTEXT_CLOSED_ORIGINAL)
+    restored = _replace_once(restored, STOP_PLAYWRIGHT_PATCHED, STOP_PLAYWRIGHT_ORIGINAL)
+    return restored
+
+
 def _has_old_or_partial_patch(text: str) -> bool:
     if any(marker in text for marker in OLD_PATCH_MARKERS):
         return True
@@ -625,6 +668,22 @@ def _replace_helper_block(text: str) -> str:
     if count == 1:
         return updated
     return text
+
+
+def _remove_helper_block(text: str) -> str:
+    pattern = rf"\n# {PATCH_MARKER}: start\n.*?\n# {PATCH_MARKER}: end\n"
+    updated, count = re.subn(pattern, "\n", text, count=1, flags=re.DOTALL)
+    if count != 1:
+        raise ValueError("Expected one CloakBrowser source helper block, found 0")
+    return updated
+
+
+def _write_reconstructed_backup(target: Path, patched_text: str) -> Path:
+    backup_dir = target.parent / ".cloakbrowser-backups"
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    backup = backup_dir / f"{target.name}.{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}.reconstructed.bak"
+    backup.write_text(unpatch_runtime_source_text(patched_text), encoding="utf-8")
+    return backup
 
 
 def _replace_once(text: str, old: str, new: str) -> str:

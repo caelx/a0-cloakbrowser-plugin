@@ -169,6 +169,37 @@ def sync_browser_extension_paths(config: dict[str, Any] | None = None) -> list[s
     return active
 
 
+def verify_extension_reconciliation(config: dict[str, Any] | None = None) -> dict[str, Any]:
+    cfg = get_config(config)
+    active = set(active_extension_paths(cfg))
+    managed = managed_extension_paths()
+    checks: dict[str, bool] = {}
+    details: dict[str, Any] = {"active_paths": sorted(active), "managed_paths": {k: str(v) for k, v in managed.items()}}
+    for key, path in managed.items():
+        enabled = bool(cfg["extensions"].get(f"enable_{key}"))
+        path_text = str(path)
+        loadable = _is_loadable(path)
+        checks[f"{key}_loadable_when_enabled"] = (not enabled) or loadable
+        checks[f"{key}_active_when_enabled"] = (not enabled) or path_text in active
+        checks[f"{key}_inactive_when_disabled"] = enabled or path_text not in active
+
+    with _agent_zero_browser_config_context() as (_plugins, get_browser_config):
+        browser_config = get_browser_config()
+    paths = [str(Path(path).expanduser()) for path in browser_config.get("extension_paths", [])]
+    details["browser_extension_paths"] = paths
+    checks["paths_deduped"] = len(paths) == len(set(paths))
+    for path in paths:
+        if _is_managed_extension_path(path, managed):
+            checks[f"path_exists:{path}"] = Path(path).is_dir()
+            checks[f"path_manifest:{path}"] = (Path(path) / "manifest.json").is_file()
+    for key, path in managed.items():
+        path_text = str(path)
+        enabled = bool(cfg["extensions"].get(f"enable_{key}"))
+        checks[f"{key}_browser_synced"] = (path_text in paths) if enabled else (path_text not in paths)
+    failed = [name for name, ok in checks.items() if not ok]
+    return {"ok": not failed, "checks": checks, "failed": failed, "details": details}
+
+
 def disable_managed_extension_paths() -> list[str]:
     removed: list[str] = []
     with _agent_zero_browser_config_context() as (plugins, get_browser_config):

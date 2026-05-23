@@ -32,7 +32,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "viewport_width": 1440,
         "viewport_height": 960,
         "cloakbrowser_cache_dir": "/opt/cloakbrowser",
-        "cloakbrowser_auto_update": False,
+        "cloakbrowser_auto_update": True,
     },
     "humanization": {
         "humanize": True,
@@ -184,7 +184,7 @@ def normalize_config(raw: dict[str, Any] | None) -> dict[str, Any]:
     rt["viewport_width"] = _int(rt.get("viewport_width"), 1440, 320, 8192)
     rt["viewport_height"] = _int(rt.get("viewport_height"), 960, 200, 8192)
     rt["cloakbrowser_cache_dir"] = str(rt.get("cloakbrowser_cache_dir") or "/opt/cloakbrowser")
-    rt["cloakbrowser_auto_update"] = _bool(rt.get("cloakbrowser_auto_update"), False)
+    rt["cloakbrowser_auto_update"] = _bool(rt.get("cloakbrowser_auto_update"), True)
 
     human = cfg["humanization"]
     human["humanize"] = _bool(human.get("humanize"), True)

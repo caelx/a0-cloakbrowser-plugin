@@ -48,3 +48,35 @@ def test_system_dependencies_use_t64_audio_fallback(monkeypatch):
 
     assert result["adaptive_packages"][0]["installed"] == "libasound2t64"
     assert "libasound2t64" in result["installed_packages"]
+
+
+def test_python_dependencies_preserve_existing_playwright(monkeypatch):
+    commands = []
+    monkeypatch.setattr(dependency_install.importlib.util, "find_spec", lambda name: object())
+    monkeypatch.setattr(
+        dependency_install.subprocess,
+        "run",
+        lambda cmd, **kwargs: commands.append(cmd) or Result(),
+    )
+
+    result = dependency_install.install_python_dependencies("cloakbrowser[geoip]>=0.3.28")
+
+    assert result["ok"] is True
+    assert "playwright" not in commands[0]
+    assert "playwright_preserved" in result["actions"]
+
+
+def test_python_dependencies_install_playwright_only_when_missing(monkeypatch):
+    commands = []
+    monkeypatch.setattr(dependency_install.importlib.util, "find_spec", lambda name: None)
+    monkeypatch.setattr(
+        dependency_install.subprocess,
+        "run",
+        lambda cmd, **kwargs: commands.append(cmd) or Result(),
+    )
+
+    result = dependency_install.install_python_dependencies("cloakbrowser[geoip]>=0.3.28")
+
+    assert result["ok"] is True
+    assert commands[0][-1] == "playwright"
+    assert "playwright_install_missing" in result["actions"]

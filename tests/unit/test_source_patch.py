@@ -1,9 +1,10 @@
 import shutil
+from pathlib import Path
 
-from helpers import source_patch
+from helpers import source_patch, validation
 
 
-def test_patch_runtime_source_applies_v10_without_legacy_plugin_root(monkeypatch, tmp_path):
+def test_patch_runtime_source_applies_current_patch_without_legacy_plugin_root(monkeypatch, tmp_path):
     runtime = tmp_path / "runtime.py"
     runtime.write_text(_old_runtime_source(), encoding="utf-8")
     monkeypatch.setattr(source_patch, "browser_runtime_source_path", lambda: runtime)
@@ -13,7 +14,7 @@ def test_patch_runtime_source_applies_v10_without_legacy_plugin_root(monkeypatch
 
     text = runtime.read_text(encoding="utf-8")
     assert result["applied"] is True
-    assert result["patch_version"] == "10"
+    assert result["patch_version"] == source_patch.PATCH_VERSION
     assert source_patch.PATCH_MARKER in text
     assert 'find_plugin_dir("cloakbrowser")' in text
     assert "/a0/usr/plugins/cloakbrowser" not in text
@@ -28,6 +29,25 @@ def test_patch_runtime_source_applies_v10_without_legacy_plugin_root(monkeypatch
     second = source_patch.patch_runtime_source(manifest)
     assert second["already_patched"] is True
     assert second["backup_path"] == result["backup_path"]
+
+
+def test_patch_runtime_source_rebuilds_metadata_for_existing_patch(monkeypatch, tmp_path):
+    runtime = tmp_path / "runtime.py"
+    original = _current_runtime_source()
+    runtime.write_text(original, encoding="utf-8")
+    monkeypatch.setattr(source_patch, "browser_runtime_source_path", lambda: runtime)
+    source_patch.patch_runtime_source({})
+
+    manifest = {}
+    result = source_patch.patch_runtime_source(manifest)
+
+    backup = result["backup_path"]
+    assert result["already_patched"] is True
+    assert backup
+    assert source_patch.sha256_file(runtime) == result["patched_hash"]
+    backup_hash = source_patch.sha256_file(tmp_path / ".cloakbrowser-backups" / Path(backup).name)
+    assert backup_hash == result["original_hash"]
+    assert validation.validate_runtime_patch(manifest)["ok"] is True
 
 
 def test_patch_runtime_source_upgrades_old_marker_and_helper(monkeypatch, tmp_path):
@@ -55,6 +75,38 @@ def _cloakbrowser_source_runtime():
     assert "CLOAKBROWSER_SOURCE_PATCH_V7" not in text
     assert "old-helper" not in text
     assert "_cloakbrowser_open_restart_lock" in text
+
+
+def test_patch_runtime_source_upgrades_v10_without_marker_corruption(monkeypatch, tmp_path):
+    runtime = tmp_path / "runtime.py"
+    v10_text = source_patch.patch_runtime_source_text(_old_runtime_source()).replace(
+        source_patch.PATCH_MARKER,
+        "CLOAKBROWSER_SOURCE_PATCH_V10",
+    )
+    runtime.write_text(v10_text, encoding="utf-8")
+    monkeypatch.setattr(source_patch, "browser_runtime_source_path", lambda: runtime)
+    manifest = {}
+
+    result = source_patch.patch_runtime_source(manifest)
+
+    text = runtime.read_text(encoding="utf-8")
+    assert result["upgraded"] is True
+    assert source_patch.PATCH_MARKER in text
+    assert "CLOAKBROWSER_SOURCE_PATCH_V110" not in text
+    assert "spec_from_file_location" in text
+    assert '"_cloakbrowser_plugin_imports"' in text
+    assert "_cloakbrowser_dir + \"/plugin_imports.py\"" in text
+    assert "_cloakbrowser_sys.path.append(_cloakbrowser_dir)" not in text
+    assert "_cloakbrowser_sys.path.insert(0, _cloakbrowser_dir)" not in text
+
+
+def test_source_runtime_helper_does_not_import_ambient_plugin_imports():
+    helper = source_patch.SOURCE_RUNTIME_HELPER
+
+    assert "from plugin_imports import" not in helper
+    assert "spec_from_file_location" in helper
+    assert '"_cloakbrowser_plugin_imports"' in helper
+    assert '"/plugin_imports.py"' in helper
 
 
 def test_restore_runtime_source_patch_requires_matching_hash(monkeypatch, tmp_path):

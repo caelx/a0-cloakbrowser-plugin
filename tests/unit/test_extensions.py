@@ -3,6 +3,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from helpers import extensions
+from helpers.extension_install import atomic_install_extension
 
 
 def test_sync_browser_extension_paths_uses_upstream_browser_config(monkeypatch, tmp_path):
@@ -175,6 +176,67 @@ def test_install_configured_extensions_updates_when_enabled(monkeypatch, tmp_pat
     assert installed == ["ublock_origin_lite"]
     assert calls == [ubol]
     assert manifest["extension_actions"][0]["action"] == "updated"
+
+
+def test_verify_extension_reconciliation_detects_disabled_managed_path(monkeypatch, tmp_path):
+    ubol = tmp_path / "ubol"
+    ubol.mkdir()
+    (ubol / "manifest.json").write_text("{}", encoding="utf-8")
+    paths = {
+        "ublock_origin_lite": ubol,
+        "i_still_dont_care_about_cookies": tmp_path / "cookies",
+        "bypass_paywalls_clean": tmp_path / "bpc",
+    }
+    monkeypatch.setattr(extensions, "managed_extension_paths", lambda: paths)
+    monkeypatch.setattr(
+        extensions,
+        "_agent_zero_browser_config_context",
+        lambda: _browser_config_context(
+            types.SimpleNamespace(save_plugin_config=lambda *args: None),
+            lambda: {"extension_paths": [str(ubol)]},
+        ),
+    )
+
+    result = extensions.verify_extension_reconciliation(_extension_config(enable_ubol=False))
+
+    assert result["ok"] is False
+    assert "ublock_origin_lite_browser_synced" in result["failed"]
+
+
+def test_atomic_install_extension_restores_old_on_failure(tmp_path):
+    target = tmp_path / "extension"
+    target.mkdir()
+    (target / "manifest.json").write_text('{"name":"old","version":"1"}', encoding="utf-8")
+    source = tmp_path / "source"
+    source.mkdir()
+
+    try:
+        atomic_install_extension(source, target, source_name="broken")
+    except ValueError:
+        pass
+
+    assert (target / "manifest.json").read_text(encoding="utf-8") == '{"name":"old","version":"1"}'
+
+
+def test_atomic_install_extension_records_provenance(tmp_path):
+    target = tmp_path / "extension"
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "manifest.json").write_text('{"name":"new","version":"2"}', encoding="utf-8")
+
+    metadata = atomic_install_extension(
+        source,
+        target,
+        source_name="source",
+        config={"enabled": True},
+        extra={"tag": "v2"},
+    )
+
+    assert metadata["source"] == "source"
+    assert metadata["manifest_version"] == "2"
+    assert metadata["sha256"]
+    assert metadata["config_hash"]
+    assert metadata["tag"] == "v2"
 
 
 def _extension_config(*, enable_ubol: bool):

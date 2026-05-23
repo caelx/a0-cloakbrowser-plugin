@@ -1,14 +1,13 @@
 from __future__ import annotations
 
-import shutil
 import tempfile
-import time
 import urllib.request
 from pathlib import Path
 from typing import Any
 
-from .chrome_store import extension_metadata, safe_extract_zip
+from .chrome_store import safe_extract_zip
 from .config import BPC_SOURCE_URL, get_config
+from .extension_install import atomic_install_extension
 
 
 def install_bypass_paywalls_clean(
@@ -27,19 +26,21 @@ def install_bypass_paywalls_clean(
         if not root:
             raise ValueError("Bypass Paywalls Clean archive did not contain manifest.json")
         _configure_bpc(root, cfg)
-        _replace_atomically(root, target_dir)
-
-    metadata = extension_metadata(target_dir, source=source_url)
-    metadata["install_timestamp"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-    metadata["source_url"] = source_url
-    return metadata
+        return atomic_install_extension(
+            root,
+            target_dir,
+            source_name=source_url,
+            config=cfg,
+            extra={"source_url": source_url},
+        )
 
 
 def _configure_bpc(root: Path, config: dict[str, Any]) -> None:
     if config["opt_in_custom_sites"]:
         custom_manifest = root / "custom" / "manifest.json"
         if custom_manifest.is_file():
-            shutil.copy2(custom_manifest, root / "manifest.json")
+            root_manifest = root / "manifest.json"
+            root_manifest.write_bytes(custom_manifest.read_bytes())
     background = root / "background.js"
     if background.is_file():
         _patch_background_defaults(
@@ -103,17 +104,3 @@ def _download(url: str, target: Path) -> None:
     if not data:
         raise ValueError("Bypass Paywalls Clean download was empty")
     target.write_bytes(data)
-
-
-def _replace_atomically(source: Path, target: Path) -> None:
-    tmp_target = target.with_name(f".{target.name}.new")
-    old_target = target.with_name(f".{target.name}.old")
-    for path in (tmp_target, old_target):
-        if path.exists():
-            shutil.rmtree(path)
-    shutil.copytree(source, tmp_target)
-    if target.exists():
-        target.rename(old_target)
-    tmp_target.rename(target)
-    if old_target.exists():
-        shutil.rmtree(old_target)

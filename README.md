@@ -15,7 +15,9 @@ In Agent Zero, use the Plugin Installer Git workflow with this repository URL.
 After install, enable `CloakBrowser`, then click the plugin's **Execute** button.
 Execute installs or repairs dependencies, configures display support, installs
 configured extensions, syncs extension paths into `_browser`, and prints a
-human-readable readiness report. It is safe to click Execute multiple times.
+human-readable readiness report. Setup is strict: it is complete only after
+required runtime patches, extension reconciliation, and a real Browser launch
+smoke pass. It is safe to click Execute multiple times.
 The equivalent noninteractive CLI setup flow is:
 
 ```text
@@ -30,8 +32,14 @@ PY
 )"
 cd "$plugin_dir"
 python execute.py setup --noninteractive
-python execute.py status
+python execute.py verify --json
+python execute.py status --json
 ```
+
+Expected success markers are `readiness.ok = true`,
+`invariants.source_patch_current = true`,
+`invariants.extension_config_reconciled = true`, and
+`invariants.last_launch_used_cloakbrowser = true`.
 
 The built-in `_browser` plugin must remain enabled because it owns the Browser
 tool, runtime, profiles, downloads, screenshots, and extension configuration.
@@ -43,19 +51,23 @@ python execute.py
 python execute.py status
 python execute.py setup --noninteractive
 python execute.py repair --noninteractive
+python execute.py verify --json
 python execute.py uninstall --noninteractive
 python execute.py status --json
 ```
 
 Running `python execute.py` is the CLI equivalent of clicking Execute. Setup
 installs system browser/display/font packages when `apt-get` is available,
-installs pinned `cloakbrowser[geoip]`, ensures the CloakBrowser binary,
+installs or upgrades `cloakbrowser[geoip]` above the plugin's minimum version,
+preserves Agent Zero's Playwright unless it is missing, ensures the CloakBrowser binary,
 configures Xvfb, installs or updates configured extensions, and syncs extension
-paths into `_browser`. Default output is human-readable; use `--json` for CI or
-scripts. `repair` reruns setup over an existing install. `status` writes
-diagnostics for dependencies, display, extensions, runtime patch state, and
-effective config. `uninstall` removes plugin-managed setup files and leaves
-profiles and browser data intact.
+paths into `_browser`. It then validates required patches and runs the Browser
+launch verification. Default output is human-readable; use `--json` for CI or
+scripts. `repair` reruns the same reconciliation over an existing install and
+preserves the last known good setup if repair fails. `status` writes diagnostics
+for dependencies, display, extensions, runtime patch state, launch proof,
+invariants, and effective config. `uninstall` removes plugin-managed setup files
+and leaves profiles and browser data intact.
 If CloakBrowser is disabled in Agent Zero, `python execute.py` removes
 plugin-managed runtime hooks/state instead of running setup. Image builds and
 repair automation can pass `--force` to set up the plugin anyway.
@@ -81,7 +93,10 @@ resolve a Chromium-shaped binary without forcing stock Playwright Chromium to be
 installed first. Setup also applies a lightweight removable source bootstrap to
 upstream `_browser/helpers/runtime.py`. The bootstrap delegates only the launch
 and headed lifecycle seams to this plugin when CloakBrowser is enabled; when the
-plugin is disabled it returns to upstream launch behavior.
+plugin is disabled it returns to upstream launch behavior. When CloakBrowser is
+enabled, the launch hook fails closed: if the runtime helper cannot load or the
+launch cannot be routed through CloakBrowser, Browser launch fails with a
+repairable error instead of silently using stock Playwright Chromium.
 
 The source bootstrap intentionally changes only the `_browser` seams
 CloakBrowser needs:
@@ -155,7 +170,13 @@ and update checks default enabled. When custom sites are enabled, setup uses
 BPC's upstream custom manifest so Chromium grants `*://*/*` host access.
 
 `sync_browser_extension_paths()` owns only managed CloakBrowser extension paths
-and exact-dedupes entries.
+and exact-dedupes entries. Enabled extensions are mandatory invariants: setup
+fails if an enabled extension is missing, not loadable, or not present in
+`_browser.extension_paths`, and fails if a disabled managed extension remains
+synced. Extension installers stage downloads in temporary directories, validate
+manifests, move the previous install aside, atomically replace it, and restore
+the previous install on failure. Status records extension source, version/tag,
+tree hash, config hash, install time, and active path.
 
 No paid-content bypass tests are run. CI only validates installation, manifest
 loading, enable/disable behavior, and launch argument inclusion.
