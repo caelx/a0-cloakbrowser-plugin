@@ -116,13 +116,25 @@ def restart_agent_zero_if_needed(restart_needed: bool, *, delay_seconds: int = 1
     if not restart_needed:
         return {"needed": False, "restarted": False, "restart_required": False}
 
+    live_processes = _agent_zero_run_ui_processes()
     supervisorctl = shutil.which("supervisorctl")
     if not supervisorctl:
+        if not live_processes:
+            result = {
+                "needed": False,
+                "restarted": False,
+                "restart_required": False,
+                "reason": "agent_zero_not_running",
+                "message": "No live Agent Zero run_ui process is running; runtime patch will load on next start.",
+            }
+            _log_event("agent_zero_restart", result)
+            return result
         result = {
             "needed": True,
             "restarted": False,
             "restart_required": True,
             "reason": "supervisorctl_not_found",
+            "agent_zero_processes": live_processes,
         }
         _log_event("agent_zero_restart", result)
         return result
@@ -136,6 +148,19 @@ def restart_agent_zero_if_needed(restart_needed: bool, *, delay_seconds: int = 1
     program = _agent_zero_supervisor_program(status.stdout)
     if not program:
         if status.returncode != 0:
+            if not live_processes:
+                result = {
+                    "needed": False,
+                    "restarted": False,
+                    "restart_required": False,
+                    "reason": "agent_zero_not_running",
+                    "returncode": status.returncode,
+                    "stderr": status.stderr.strip(),
+                    "status": status.stdout.strip(),
+                    "message": "No live Agent Zero run_ui process is running; runtime patch will load on next start.",
+                }
+                _log_event("agent_zero_restart", result)
+                return result
             result = {
                 "needed": True,
                 "restarted": False,
@@ -144,6 +169,18 @@ def restart_agent_zero_if_needed(restart_needed: bool, *, delay_seconds: int = 1
                 "returncode": status.returncode,
                 "stderr": status.stderr.strip(),
                 "status": status.stdout.strip(),
+                "agent_zero_processes": live_processes,
+            }
+            _log_event("agent_zero_restart", result)
+            return result
+        if not live_processes:
+            result = {
+                "needed": False,
+                "restarted": False,
+                "restart_required": False,
+                "reason": "agent_zero_not_running",
+                "status": status.stdout.strip(),
+                "message": "No live Agent Zero run_ui process is running; runtime patch will load on next start.",
             }
             _log_event("agent_zero_restart", result)
             return result
@@ -153,6 +190,7 @@ def restart_agent_zero_if_needed(restart_needed: bool, *, delay_seconds: int = 1
             "restart_required": True,
             "reason": "agent_zero_program_not_found",
             "status": status.stdout.strip(),
+            "agent_zero_processes": live_processes,
         }
         _log_event("agent_zero_restart", result)
         return result
@@ -332,6 +370,31 @@ def _agent_zero_supervisor_program(output: str, *, proc_root: Path = Path("/proc
         if normalized.startswith(("agent-zero", "agent_zero")):
             return name
     return ""
+
+
+def _agent_zero_run_ui_processes(*, proc_root: Path = Path("/proc")) -> list[dict[str, Any]]:
+    current_pid = os.getpid()
+    processes: list[dict[str, Any]] = []
+    entries = (
+        sorted(
+            (entry for entry in proc_root.iterdir() if entry.name.isdigit()),
+            key=lambda entry: int(entry.name),
+        )
+        if proc_root.exists()
+        else ()
+    )
+    for entry in entries:
+        pid = int(entry.name)
+        if pid == current_pid:
+            continue
+        cmdline = _read_cmdline(entry / "cmdline")
+        if not cmdline:
+            continue
+        text = " ".join(cmdline)
+        if "/a0/run_ui.py" not in text and "/git/agent-zero/run_ui.py" not in text:
+            continue
+        processes.append({"pid": pid, "cmdline": cmdline})
+    return processes
 
 
 def _supervisor_line_pid(line: str) -> int | None:

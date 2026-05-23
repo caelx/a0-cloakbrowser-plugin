@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Bump plugin version to `1.3.5`.
+- Allow setup/repair integration runs to continue after a runtime patch when no
+  live Agent Zero `run_ui` process exists to restart.
 - Bump plugin version to `1.3.4`.
 - Prevent the Agent Zero Browser open patch from reusing CloakBrowser extension
   pages as normal browser tabs after extension startup or recovery.

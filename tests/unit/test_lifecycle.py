@@ -269,6 +269,11 @@ def test_scheduled_restart_falls_back_to_start(monkeypatch, tmp_path):
 def test_restart_agent_zero_reports_manual_restart_when_program_missing(monkeypatch):
     monkeypatch.setattr(lifecycle.shutil, "which", lambda name: "/usr/bin/supervisorctl")
     monkeypatch.setattr(
+        lifecycle,
+        "_agent_zero_run_ui_processes",
+        lambda: [{"pid": 44, "cmdline": ["python", "/a0/run_ui.py"]}],
+    )
+    monkeypatch.setattr(
         lifecycle.subprocess,
         "run",
         lambda command, **kwargs: SimpleNamespace(
@@ -288,6 +293,11 @@ def test_restart_agent_zero_reports_manual_restart_when_program_missing(monkeypa
 def test_restart_agent_zero_does_not_select_unrelated_web_sidecar(monkeypatch):
     monkeypatch.setattr(lifecycle.shutil, "which", lambda name: "/usr/bin/supervisorctl")
     monkeypatch.setattr(
+        lifecycle,
+        "_agent_zero_run_ui_processes",
+        lambda: [{"pid": 44, "cmdline": ["python", "/a0/run_ui.py"]}],
+    )
+    monkeypatch.setattr(
         lifecycle.subprocess,
         "run",
         lambda command, **kwargs: SimpleNamespace(
@@ -302,6 +312,26 @@ def test_restart_agent_zero_does_not_select_unrelated_web_sidecar(monkeypatch):
     assert result["restarted"] is False
     assert result["restart_required"] is True
     assert result["reason"] == "agent_zero_program_not_found"
+
+
+def test_restart_agent_zero_skips_when_no_live_run_ui_and_supervisor_unavailable(monkeypatch):
+    monkeypatch.setattr(lifecycle.shutil, "which", lambda name: "/usr/bin/supervisorctl")
+    monkeypatch.setattr(lifecycle, "_agent_zero_run_ui_processes", lambda: [])
+    monkeypatch.setattr(
+        lifecycle.subprocess,
+        "run",
+        lambda command, **kwargs: SimpleNamespace(
+            returncode=4,
+            stdout="unix:///var/run/supervisor.sock no such file\n",
+            stderr="",
+        ),
+    )
+
+    result = lifecycle.restart_agent_zero_if_needed(True)
+
+    assert result["needed"] is False
+    assert result["restart_required"] is False
+    assert result["reason"] == "agent_zero_not_running"
 
 
 def test_reconcile_restarts_when_source_patch_changed_or_stock_browser_detected(monkeypatch):
