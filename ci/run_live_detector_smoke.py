@@ -121,6 +121,11 @@ async def probe_target(core: Any, target: LiveTarget, screenshots: Path) -> dict
         screenshot = screenshots / f"{target.category}-{target.name}.png"
         await page.screenshot(path=str(screenshot))
         result["screenshot"] = str(screenshot)
+        if reason := unavailable_target_reason(target, result):
+            result["status"] = "skipped"
+            result["skip_reason"] = reason
+            result["checks"] = []
+            return result
         result["checks"] = target_checks(target, result)
     except Exception as exc:
         result["status"] = "error"
@@ -199,6 +204,8 @@ def check(name: str, passed: bool) -> dict[str, Any]:
 def live_failures(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
     failures = []
     for result in results:
+        if result.get("status") == "skipped":
+            continue
         if result.get("status") != "ok":
             failures.append(result)
             continue
@@ -218,6 +225,20 @@ def selected_targets(value: str) -> list[LiveTarget]:
             f"Unknown CLOAKBROWSER_LIVE_DETECTOR_TARGETS entries: {', '.join(unknown)}"
         )
     return [by_name[name] for name in requested]
+
+
+def unavailable_target_reason(target: LiveTarget, result: dict[str, Any]) -> str:
+    if not target.name.startswith("httpbin-"):
+        return ""
+    title = str(result.get("state", {}).get("title", ""))
+    text = str(result.get("text", ""))
+    if re.search(r"\b(502|503|504)\b", title) or re.search(
+        r"\b(502|503|504)\s+(Bad Gateway|Service Unavailable|Gateway Timeout)\b",
+        text,
+        flags=re.IGNORECASE,
+    ):
+        return "httpbin returned a transient 5xx response"
+    return ""
 
 
 def extract_json_object(text: str) -> dict[str, Any]:

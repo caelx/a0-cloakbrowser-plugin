@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Bump plugin version to `1.3.9`.
+- Treat transient `httpbin` 5xx responses as skipped live-detector targets so
+  the Upstream Canary does not fail on third-party probe outages.
 - Bump plugin version to `1.3.8`.
 - Force setup/verify imports to use the same Agent Zero root selected for
   source patching and drop stale cached `_browser` modules during that import.

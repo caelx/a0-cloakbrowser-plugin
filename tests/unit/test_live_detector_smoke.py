@@ -26,6 +26,7 @@ def test_live_failures_reports_errors_and_failed_checks():
     failures = smoke.live_failures(
         [
             {"status": "ok", "checks": [{"status": "passed"}]},
+            {"status": "skipped", "checks": []},
             {"status": "error", "checks": []},
             {"status": "ok", "checks": [{"status": "failed"}]},
         ]
@@ -58,3 +59,27 @@ def test_target_checks_include_infrastructure_checks(tmp_path):
     assert by_name["page loaded"] == "passed"
     assert by_name["page has title or body text"] == "passed"
     assert by_name["screenshot was created"] == "passed"
+
+
+def test_httpbin_5xx_is_classified_as_unavailable_target():
+    reason = smoke.unavailable_target_reason(
+        smoke.LiveTarget("httpbin-ip", "headers-tls", "https://httpbin.org/ip"),
+        {
+            "state": {"title": "502 Bad Gateway"},
+            "text": "502 Bad Gateway",
+        },
+    )
+
+    assert reason == "httpbin returned a transient 5xx response"
+
+
+def test_non_httpbin_5xx_is_not_classified_as_unavailable_target():
+    reason = smoke.unavailable_target_reason(
+        smoke.LiveTarget("sannysoft", "detection", "https://bot.sannysoft.com/"),
+        {
+            "state": {"title": "502 Bad Gateway"},
+            "text": "502 Bad Gateway",
+        },
+    )
+
+    assert reason == ""
