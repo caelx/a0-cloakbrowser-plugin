@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Bump plugin version to `1.3.10`.
+- Pass the GitHub Actions token into Upstream Canary integration runs and accept
+  `GH_TOKEN` for uBOL GitHub API calls to avoid anonymous rate limits.
 - Bump plugin version to `1.3.9`.
 - Treat transient `httpbin` 5xx responses as skipped live-detector targets so
   the Upstream Canary does not fail on third-party probe outages.

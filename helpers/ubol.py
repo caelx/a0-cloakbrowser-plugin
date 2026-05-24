@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import tarfile
 import tempfile
+import urllib.error
 import urllib.request
 from pathlib import Path
 from typing import Any
@@ -11,6 +13,7 @@ from typing import Any
 from .extension_install import atomic_install_extension
 
 REPO_TAGS_URL = "https://api.github.com/repos/uBlockOrigin/uBOL-home/tags?per_page=1"
+REPO_GIT_URL = "https://github.com/uBlockOrigin/uBOL-home.git"
 ARCHIVE_URL = "https://github.com/uBlockOrigin/uBOL-home/archive/refs/tags/{tag}.tar.gz"
 REQUIRED_RULESETS = {"ublock-filters", "easylist", "easyprivacy", "ublock-badware", "urlhaus-full"}
 
@@ -46,14 +49,34 @@ def _latest_tag() -> str:
         REPO_TAGS_URL,
         headers=_github_headers(accept="application/vnd.github+json"),
     )
-    with urllib.request.urlopen(request, timeout=60) as response:
-        payload = json.loads(response.read().decode("utf-8"))
+    try:
+        with urllib.request.urlopen(request, timeout=60) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        if exc.code in {403, 429}:
+            return _latest_tag_from_git()
+        raise
     if not isinstance(payload, list) or not payload:
         raise ValueError("GitHub tags API returned no uBOL tags")
     tag = payload[0].get("name") if isinstance(payload[0], dict) else ""
     if not tag:
         raise ValueError("GitHub tags API returned an invalid uBOL tag")
     return str(tag)
+
+
+def _latest_tag_from_git() -> str:
+    completed = subprocess.run(
+        ["git", "ls-remote", "--tags", "--sort=-v:refname", REPO_GIT_URL, "refs/tags/*"],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    for line in completed.stdout.splitlines():
+        ref = line.rsplit(maxsplit=1)[-1] if line.split() else ""
+        if ref.startswith("refs/tags/") and not ref.endswith("^{}"):
+            return ref.removeprefix("refs/tags/")
+    raise ValueError("Git tag fallback returned no uBOL tags")
 
 
 def _download_archive(tag: str, destination: Path) -> None:
@@ -120,7 +143,7 @@ def _github_headers(*, accept: str | None = None) -> dict[str, str]:
     headers = {"User-Agent": "cloakbrowser-agent-zero-plugin"}
     if accept:
         headers["Accept"] = accept
-    token = os.environ.get("GITHUB_TOKEN")
+    token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
     if token:
         headers["Authorization"] = f"Bearer {token}"
         headers["X-GitHub-Api-Version"] = "2022-11-28"
