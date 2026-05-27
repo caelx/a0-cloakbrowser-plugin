@@ -1,1 +1,1 @@
-cloakbrowser[geoip,patchright]>=0.3.28
+cloakbrowser[geoip,patchright]>=0.3.30
