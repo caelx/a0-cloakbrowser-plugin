@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Bump plugin version to `1.3.13`.
+- Keep Browser keyboard dedupe scoped to the emitting viewer, restore disabled
+  plugin opt-out in the runtime source bootstrap, and rebuild sidecar patch
+  backup metadata when recovering already-patched installs.
+- Bump the Agent Zero runtime source bootstrap to V17 and websocket source patch
+  to V2 so repair upgrades existing patched installs.
 - Bump plugin version to `1.3.12`.
 - Mark Browser keydown events as handled in the Agent Zero frontend so duplicate
   global listeners cannot emit the same keyboard event twice.

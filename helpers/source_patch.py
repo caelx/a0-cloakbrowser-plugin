@@ -8,9 +8,10 @@ from typing import Any
 
 from .patcher import backup_file, sha256_file
 
-PATCH_VERSION = "16"
-PATCH_MARKER = "CLOAKBROWSER_SOURCE_PATCH_V16"
+PATCH_VERSION = "17"
+PATCH_MARKER = "CLOAKBROWSER_SOURCE_PATCH_V17"
 OLD_PATCH_MARKERS = (
+    "CLOAKBROWSER_SOURCE_PATCH_V16",
     "CLOAKBROWSER_SOURCE_PATCH_V15",
     "CLOAKBROWSER_SOURCE_PATCH_V14",
     "CLOAKBROWSER_SOURCE_PATCH_V13",
@@ -27,8 +28,9 @@ OLD_PATCH_MARKERS = (
     "CLOAKBROWSER_SOURCE_PATCH_V2",
     "CLOAKBROWSER_SOURCE_PATCH_V1",
 )
-WS_PATCH_VERSION = "1"
-WS_PATCH_MARKER = "CLOAKBROWSER_WS_SOURCE_PATCH_V1"
+WS_PATCH_VERSION = "2"
+WS_PATCH_MARKER = "CLOAKBROWSER_WS_SOURCE_PATCH_V2"
+OLD_WS_PATCH_MARKERS = ("CLOAKBROWSER_WS_SOURCE_PATCH_V1",)
 BROWSER_STORE_PATCH_VERSION = "1"
 BROWSER_STORE_PATCH_MARKER = "CLOAKBROWSER_BROWSER_STORE_SOURCE_PATCH_V1"
 
@@ -39,8 +41,15 @@ WS_CLASS_ORIGINAL = """class WsBrowser(WsHandler):
 WS_CLASS_PATCHED = f"""class WsBrowser(WsHandler):
     # {WS_PATCH_MARKER}: start
     _streams: ClassVar[dict[tuple[str, str], asyncio.Task[None]]] = {{}}
-    _last_keyboard_inputs: ClassVar[dict[tuple[str, str, str, str], dict[str, Any]]] = {{}}
+    _last_keyboard_inputs: ClassVar[dict[tuple[str, str, str, str, str], dict[str, Any]]] = {{}}
     # {WS_PATCH_MARKER}: end
+"""
+
+WS_CLASS_PATCHED_V1 = """class WsBrowser(WsHandler):
+    # CLOAKBROWSER_WS_SOURCE_PATCH_V1: start
+    _streams: ClassVar[dict[tuple[str, str], asyncio.Task[None]]] = {}
+    _last_keyboard_inputs: ClassVar[dict[tuple[str, str, str, str], dict[str, Any]]] = {}
+    # CLOAKBROWSER_WS_SOURCE_PATCH_V1: end
 """
 
 WS_INPUT_ORIGINAL = """        input_type = str(data.get("input_type") or "").strip().lower()
@@ -49,6 +58,25 @@ WS_INPUT_ORIGINAL = """        input_type = str(data.get("input_type") or "").st
 """
 
 WS_INPUT_PATCHED = """        input_type = str(data.get("input_type") or "").strip().lower()
+        browser_id = data.get("browser_id")
+        if input_type == "keyboard":
+            viewer_id = str(data.get("viewer_id") or sid or "")
+            keyboard_signature = (
+                context_id,
+                str(browser_id),
+                viewer_id,
+                str(data.get("key") or ""),
+                str(data.get("text") or ""),
+            )
+            keyboard_now = time.monotonic()
+            previous_keyboard = self._last_keyboard_inputs.get(keyboard_signature)
+            self._last_keyboard_inputs[keyboard_signature] = {"t": keyboard_now, "sid": sid, "viewer_id": viewer_id}
+            if previous_keyboard and keyboard_now - float(previous_keyboard.get("t") or 0) < 0.025:
+                return {"state": None, "snapshot": None}
+        try:
+"""
+
+WS_INPUT_PATCHED_V1 = """        input_type = str(data.get("input_type") or "").strip().lower()
         browser_id = data.get("browser_id")
         if input_type == "keyboard":
             keyboard_signature = (
@@ -97,6 +125,30 @@ def _cloakbrowser_source_runtime():
     try:
         import importlib.util as _cloakbrowser_importlib_util
         from helpers import plugins as _cloakbrowser_plugins
+
+        _cloakbrowser_enabled = _cloakbrowser_plugins.get_enabled_plugins(None)
+        if _cloakbrowser_enabled is not None:
+            _cloakbrowser_found = False
+            for _cloakbrowser_entry in _cloakbrowser_enabled:
+                if isinstance(_cloakbrowser_entry, str):
+                    _cloakbrowser_name = _cloakbrowser_entry
+                elif isinstance(_cloakbrowser_entry, dict):
+                    _cloakbrowser_name = (
+                        _cloakbrowser_entry.get("name")
+                        or _cloakbrowser_entry.get("id")
+                        or _cloakbrowser_entry.get("plugin_name")
+                    )
+                else:
+                    _cloakbrowser_name = (
+                        getattr(_cloakbrowser_entry, "name", None)
+                        or getattr(_cloakbrowser_entry, "id", None)
+                        or getattr(_cloakbrowser_entry, "plugin_name", None)
+                    )
+                if str(_cloakbrowser_name or "") == "cloakbrowser":
+                    _cloakbrowser_found = True
+                    break
+            if not _cloakbrowser_found:
+                return None
 
         _cloakbrowser_dir = _cloakbrowser_plugins.find_plugin_dir("cloakbrowser")
         if not _cloakbrowser_dir:
@@ -541,6 +593,9 @@ def patch_ws_browser_source(manifest: dict[str, Any]) -> dict[str, Any]:
         backup_path = previous.get("backup_path", "")
         if backup_path and not original_hash and Path(str(backup_path)).is_file():
             original_hash = sha256_file(Path(str(backup_path)))
+        if not backup_path or not Path(str(backup_path)).is_file():
+            backup_path = str(_write_reconstructed_backup(target, original_text, unpatch_ws_browser_source_text))
+            original_hash = sha256_file(Path(backup_path))
         result = {
             "applied": True,
             "already_patched": True,
@@ -555,8 +610,13 @@ def patch_ws_browser_source(manifest: dict[str, Any]) -> dict[str, Any]:
         _record_ws_patch(manifest, result)
         return result
 
+    is_old_patch = any(marker in original_text for marker in OLD_WS_PATCH_MARKERS)
     original_hash = sha256_file(target)
-    patched_text = patch_ws_browser_source_text(original_text)
+    patched_text = (
+        upgrade_ws_browser_source_text(original_text)
+        if is_old_patch
+        else patch_ws_browser_source_text(original_text)
+    )
     backup = backup_file(target, target.parent / ".cloakbrowser-backups")
     target.write_text(patched_text, encoding="utf-8")
     patched_hash = sha256_file(target)
@@ -569,6 +629,7 @@ def patch_ws_browser_source(manifest: dict[str, Any]) -> dict[str, Any]:
         "patched_hash": patched_hash,
         "patch_version": WS_PATCH_VERSION,
         "timestamp": _utc_now(),
+        "upgraded": is_old_patch,
     }
     manifest["ws_browser_source_patch"] = result
     _record_ws_patch(manifest, result)
@@ -584,6 +645,9 @@ def patch_browser_store_source(manifest: dict[str, Any]) -> dict[str, Any]:
         backup_path = previous.get("backup_path", "")
         if backup_path and not original_hash and Path(str(backup_path)).is_file():
             original_hash = sha256_file(Path(str(backup_path)))
+        if not backup_path or not Path(str(backup_path)).is_file():
+            backup_path = str(_write_reconstructed_backup(target, original_text, unpatch_browser_store_source_text))
+            original_hash = sha256_file(Path(backup_path))
         result = {
             "applied": True,
             "already_patched": True,
@@ -757,6 +821,12 @@ def unpatch_ws_browser_source_text(text: str) -> str:
     return restored
 
 
+def upgrade_ws_browser_source_text(text: str) -> str:
+    patched = _replace_once(text, WS_CLASS_PATCHED_V1, WS_CLASS_PATCHED)
+    patched = _replace_once(patched, WS_INPUT_PATCHED_V1, WS_INPUT_PATCHED)
+    return patched
+
+
 def patch_browser_store_source_text(text: str) -> str:
     patched = _replace_once(text, BROWSER_STORE_HANDLE_KEYDOWN_ORIGINAL, BROWSER_STORE_HANDLE_KEYDOWN_PATCHED)
     patched = _replace_once(patched, BROWSER_STORE_SEND_KEY_ORIGINAL, BROWSER_STORE_SEND_KEY_PATCHED)
@@ -905,11 +975,11 @@ def _remove_helper_block(text: str) -> str:
     return updated
 
 
-def _write_reconstructed_backup(target: Path, patched_text: str) -> Path:
+def _write_reconstructed_backup(target: Path, patched_text: str, unpatcher=unpatch_runtime_source_text) -> Path:
     backup_dir = target.parent / ".cloakbrowser-backups"
     backup_dir.mkdir(parents=True, exist_ok=True)
     backup = backup_dir / f"{target.name}.{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}.reconstructed.bak"
-    backup.write_text(unpatch_runtime_source_text(patched_text), encoding="utf-8")
+    backup.write_text(unpatcher(patched_text), encoding="utf-8")
     return backup
 
 
