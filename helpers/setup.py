@@ -17,7 +17,7 @@ from .extensions import (
 from .install_manifest import load_manifest, mark_setup, record_warning, save_manifest
 from .lifecycle import reconcile_after_setup
 from .seed_playwright import ensure_masquerade, remove_masquerade
-from .source_patch import patch_runtime_source
+from .source_patch import patch_runtime_source, patch_ws_browser_source
 from .validation import validate_runtime_patch
 from .verify import verify_browser_launch
 from .xvfb import ensure_display, remove_direct_xvfb_if_owned, remove_supervisor_config_if_owned
@@ -87,6 +87,7 @@ def setup_plugin(*, noninteractive: bool = False, skip_system_deps: bool = False
                 + ", ".join(extension_validation.get("failed") or ["unknown"])
             )
         source_patch = patch_runtime_source(manifest)
+        ws_source_patch = patch_ws_browser_source(manifest)
         runtime_validation = validate_runtime_patch(manifest)
         if not runtime_validation.get("ok"):
             raise RuntimeError(
@@ -96,7 +97,15 @@ def setup_plugin(*, noninteractive: bool = False, skip_system_deps: bool = False
         manifest["extension_reconciliation"] = extension_validation
         manifest["runtime_patch_validation"] = runtime_validation
         save_manifest(manifest)
-        lifecycle = reconcile_after_setup(cfg, source_patch)
+        lifecycle = reconcile_after_setup(
+            cfg,
+            {
+                "applied": bool(source_patch.get("applied") or ws_source_patch.get("applied")),
+                "already_patched": bool(
+                    source_patch.get("already_patched") and ws_source_patch.get("already_patched")
+                ),
+            },
+        )
         manifest["lifecycle"] = lifecycle
         restart = lifecycle.get("agent_zero_restart") or {}
         if restart.get("scheduled"):
@@ -150,6 +159,7 @@ def setup_plugin(*, noninteractive: bool = False, skip_system_deps: bool = False
         "persistent": True,
         "applied_in_setup": bool(source_patch.get("applied")),
         "source_patch": source_patch,
+        "ws_source_patch": ws_source_patch,
         "applies_when": "Agent Zero _browser runtime import and Browser launch",
     }
     shim_patch = {

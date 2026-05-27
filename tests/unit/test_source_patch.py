@@ -34,13 +34,17 @@ def test_patch_runtime_source_applies_current_patch_without_legacy_plugin_root(m
 
 def test_patch_runtime_source_rebuilds_metadata_for_existing_patch(monkeypatch, tmp_path):
     runtime = tmp_path / "runtime.py"
+    ws_browser = tmp_path / "ws_browser.py"
     original = _current_runtime_source()
     runtime.write_text(original, encoding="utf-8")
+    ws_browser.write_text(_ws_browser_source(), encoding="utf-8")
     monkeypatch.setattr(source_patch, "browser_runtime_source_path", lambda: runtime)
+    monkeypatch.setattr(source_patch, "browser_ws_source_path", lambda: ws_browser)
     source_patch.patch_runtime_source({})
 
     manifest = {}
     result = source_patch.patch_runtime_source(manifest)
+    source_patch.patch_ws_browser_source(manifest)
 
     backup = result["backup_path"]
     assert result["already_patched"] is True
@@ -108,6 +112,50 @@ def test_source_runtime_helper_does_not_import_ambient_plugin_imports():
     assert "spec_from_file_location" in helper
     assert '"_cloakbrowser_plugin_imports"' in helper
     assert '"/plugin_imports.py"' in helper
+
+
+def test_patch_ws_browser_source_dedupes_duplicate_keyboard_events(monkeypatch, tmp_path):
+    ws_browser = tmp_path / "ws_browser.py"
+    ws_browser.write_text(_ws_browser_source(), encoding="utf-8")
+    monkeypatch.setattr(source_patch, "browser_ws_source_path", lambda: ws_browser)
+    manifest = {}
+
+    result = source_patch.patch_ws_browser_source(manifest)
+
+    text = ws_browser.read_text(encoding="utf-8")
+    assert result["applied"] is True
+    assert result["patch_version"] == source_patch.WS_PATCH_VERSION
+    assert source_patch.WS_PATCH_MARKER in text
+    assert "_last_keyboard_inputs" in text
+    assert "keyboard_now - float(previous_keyboard.get(\"t\") or 0) < 0.025" in text
+    assert manifest["ws_browser_source_patch"]["target_path"] == str(ws_browser)
+    assert manifest["runtime_patches"][0]["kind"] == "source_ws_browser"
+
+    second = source_patch.patch_ws_browser_source(manifest)
+    assert second["already_patched"] is True
+    assert second["backup_path"] == result["backup_path"]
+
+
+def test_restore_ws_browser_source_patch_requires_matching_hash(monkeypatch, tmp_path):
+    ws_browser = tmp_path / "ws_browser.py"
+    original = _ws_browser_source()
+    ws_browser.write_text(original, encoding="utf-8")
+    monkeypatch.setattr(source_patch, "browser_ws_source_path", lambda: ws_browser)
+    manifest = {}
+    source_patch.patch_ws_browser_source(manifest)
+    ws_browser.write_text(ws_browser.read_text(encoding="utf-8") + "# user edit\n", encoding="utf-8")
+
+    skipped = source_patch.restore_ws_browser_source_patch(manifest)
+
+    assert skipped["restored"] is False
+    assert skipped["reason"] == "current_hash_mismatch"
+
+    shutil.copy2(manifest["ws_browser_source_patch"]["backup_path"], ws_browser)
+    source_patch.patch_ws_browser_source(manifest)
+    restored = source_patch.restore_ws_browser_source_patch(manifest)
+
+    assert restored["restored"] is True
+    assert ws_browser.read_text(encoding="utf-8") == original
 
 
 def test_restore_runtime_source_patch_requires_matching_hash(monkeypatch, tmp_path):
@@ -239,4 +287,37 @@ class _BrowserRuntimeCore:
 {source_patch.CLOSE_ALL_ORIGINAL}
 {source_patch.CONTEXT_CLOSED_ORIGINAL}
 {source_patch.STOP_PLAYWRIGHT_ORIGINAL}
+"""
+
+
+def _ws_browser_source() -> str:
+    return f"""
+from __future__ import annotations
+
+import asyncio
+import contextlib
+import time
+from typing import Any, ClassVar
+
+from helpers.ws import WsHandler
+
+
+{source_patch.WS_CLASS_ORIGINAL}
+    async def _input(self, data: dict[str, Any], sid: str) -> dict[str, Any]:
+        context_id = self._context_id(data)
+        runtime = await get_runtime(context_id, create=False)
+
+{source_patch.WS_INPUT_ORIGINAL}            if input_type == "keyboard":
+                result = await runtime.call(
+                    "keyboard",
+                    browser_id,
+                    key=str(data.get("key") or ""),
+                    text=str(data.get("text") or ""),
+                )
+            else:
+                result = {{}}
+        except Exception as exc:
+            return self._error("INPUT_FAILED", str(exc), data)
+
+        return {{"state": result, "snapshot": None}}
 """

@@ -7,10 +7,12 @@ from typing import Any
 
 from .config import manifest_path
 
+PLUGIN_VERSION = "1.3.11"
+
 
 def empty_manifest() -> dict[str, Any]:
     return {
-        "plugin_version": "1.3.10",
+        "plugin_version": PLUGIN_VERSION,
         "setup_status": "not_setup",
         "setup_timestamp": "",
         "agent_zero": {},
@@ -51,6 +53,7 @@ def save_manifest(manifest: dict[str, Any], path: Path | None = None) -> dict[st
 
 
 def mark_setup(manifest: dict[str, Any]) -> dict[str, Any]:
+    manifest["plugin_version"] = PLUGIN_VERSION
     manifest["setup_status"] = "setup"
     manifest["setup_timestamp"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     return manifest
