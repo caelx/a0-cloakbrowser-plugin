@@ -29,6 +29,8 @@ OLD_PATCH_MARKERS = (
 )
 WS_PATCH_VERSION = "1"
 WS_PATCH_MARKER = "CLOAKBROWSER_WS_SOURCE_PATCH_V1"
+BROWSER_STORE_PATCH_VERSION = "1"
+BROWSER_STORE_PATCH_MARKER = "CLOAKBROWSER_BROWSER_STORE_SOURCE_PATCH_V1"
 
 WS_CLASS_ORIGINAL = """class WsBrowser(WsHandler):
     _streams: ClassVar[dict[tuple[str, str], asyncio.Task[None]]] = {}
@@ -61,6 +63,31 @@ WS_INPUT_PATCHED = """        input_type = str(data.get("input_type") or "").str
             if previous_keyboard and keyboard_now - float(previous_keyboard.get("t") or 0) < 0.025:
                 return {"state": None, "snapshot": None}
         try:
+"""
+
+BROWSER_STORE_HANDLE_KEYDOWN_ORIGINAL = """  handleKeydown(event) {
+    const annotateShortcut = event?.key === "." && (event.metaKey || event.ctrlKey) && !event.altKey;
+"""
+
+BROWSER_STORE_HANDLE_KEYDOWN_PATCHED = f"""  handleKeydown(event) {{
+    // {BROWSER_STORE_PATCH_MARKER}: start
+    if (event.__cloakbrowserBrowserKeydownHandled) return;
+    event.__cloakbrowserBrowserKeydownHandled = true;
+    // {BROWSER_STORE_PATCH_MARKER}: end
+    const annotateShortcut = event?.key === "." && (event.metaKey || event.ctrlKey) && !event.altKey;
+"""
+
+BROWSER_STORE_SEND_KEY_ORIGINAL = """    await websocket.emit("browser_viewer_input", {
+      context_id: contextId,
+      browser_id: this.activeBrowserId,
+      input_type: "keyboard",
+"""
+
+BROWSER_STORE_SEND_KEY_PATCHED = """    await websocket.emit("browser_viewer_input", {
+      context_id: contextId,
+      browser_id: this.activeBrowserId,
+      viewer_id: this._viewerToken,
+      input_type: "keyboard",
 """
 
 SOURCE_RUNTIME_HELPER = f"""
@@ -548,6 +575,49 @@ def patch_ws_browser_source(manifest: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
+def patch_browser_store_source(manifest: dict[str, Any]) -> dict[str, Any]:
+    target = browser_store_source_path()
+    original_text = target.read_text(encoding="utf-8")
+    if BROWSER_STORE_PATCH_MARKER in original_text:
+        previous = manifest.get("browser_store_source_patch") or {}
+        original_hash = previous.get("original_hash", "")
+        backup_path = previous.get("backup_path", "")
+        if backup_path and not original_hash and Path(str(backup_path)).is_file():
+            original_hash = sha256_file(Path(str(backup_path)))
+        result = {
+            "applied": True,
+            "already_patched": True,
+            "target_path": str(target),
+            "backup_path": backup_path,
+            "original_hash": original_hash,
+            "patched_hash": sha256_file(target),
+            "patch_version": BROWSER_STORE_PATCH_VERSION,
+            "timestamp": _utc_now(),
+        }
+        manifest["browser_store_source_patch"] = result
+        _record_browser_store_patch(manifest, result)
+        return result
+
+    original_hash = sha256_file(target)
+    patched_text = patch_browser_store_source_text(original_text)
+    backup = backup_file(target, target.parent / ".cloakbrowser-backups")
+    target.write_text(patched_text, encoding="utf-8")
+    patched_hash = sha256_file(target)
+    result = {
+        "applied": True,
+        "already_patched": False,
+        "target_path": str(target),
+        "backup_path": str(backup),
+        "original_hash": original_hash,
+        "patched_hash": patched_hash,
+        "patch_version": BROWSER_STORE_PATCH_VERSION,
+        "timestamp": _utc_now(),
+    }
+    manifest["browser_store_source_patch"] = result
+    _record_browser_store_patch(manifest, result)
+    return result
+
+
 def restore_runtime_source_patch(manifest: dict[str, Any]) -> dict[str, Any]:
     patch = manifest.get("runtime_source_patch") or {}
     target_path = patch.get("target_path")
@@ -598,6 +668,31 @@ def restore_ws_browser_source_patch(manifest: dict[str, Any]) -> dict[str, Any]:
     return {"restored": True, "target_path": str(target), "restored_hash": sha256_file(target)}
 
 
+def restore_browser_store_source_patch(manifest: dict[str, Any]) -> dict[str, Any]:
+    patch = manifest.get("browser_store_source_patch") or {}
+    target_path = patch.get("target_path")
+    backup_path = patch.get("backup_path")
+    patched_hash = patch.get("patched_hash")
+    if not target_path or not backup_path or not patched_hash:
+        return {"restored": False, "reason": "not_patched"}
+
+    target = Path(str(target_path))
+    backup = Path(str(backup_path))
+    if not target.is_file() or not backup.is_file():
+        return {"restored": False, "reason": "missing_file", "target_path": str(target)}
+    current_hash = sha256_file(target)
+    if current_hash != patched_hash:
+        return {
+            "restored": False,
+            "reason": "current_hash_mismatch",
+            "target_path": str(target),
+            "current_hash": current_hash,
+            "expected_hash": patched_hash,
+        }
+    shutil.copy2(backup, target)
+    return {"restored": True, "target_path": str(target), "restored_hash": sha256_file(target)}
+
+
 def browser_runtime_source_path() -> Path:
     from .runtime_patch import _agent_zero_import_context
 
@@ -614,6 +709,15 @@ def browser_ws_source_path() -> Path:
         from plugins._browser.api import ws_browser
 
         return Path(ws_browser.__file__).resolve()
+
+
+def browser_store_source_path() -> Path:
+    from .runtime_patch import _agent_zero_import_context
+
+    with _agent_zero_import_context():
+        from plugins._browser.helpers import runtime
+
+        return Path(runtime.__file__).resolve().parents[1] / "webui" / "browser-store.js"
 
 
 def patch_runtime_source_text(text: str) -> str:
@@ -650,6 +754,18 @@ def patch_ws_browser_source_text(text: str) -> str:
 def unpatch_ws_browser_source_text(text: str) -> str:
     restored = _replace_once(text, WS_CLASS_PATCHED, WS_CLASS_ORIGINAL)
     restored = _replace_once(restored, WS_INPUT_PATCHED, WS_INPUT_ORIGINAL)
+    return restored
+
+
+def patch_browser_store_source_text(text: str) -> str:
+    patched = _replace_once(text, BROWSER_STORE_HANDLE_KEYDOWN_ORIGINAL, BROWSER_STORE_HANDLE_KEYDOWN_PATCHED)
+    patched = _replace_once(patched, BROWSER_STORE_SEND_KEY_ORIGINAL, BROWSER_STORE_SEND_KEY_PATCHED)
+    return patched
+
+
+def unpatch_browser_store_source_text(text: str) -> str:
+    restored = _replace_once(text, BROWSER_STORE_HANDLE_KEYDOWN_PATCHED, BROWSER_STORE_HANDLE_KEYDOWN_ORIGINAL)
+    restored = _replace_once(restored, BROWSER_STORE_SEND_KEY_PATCHED, BROWSER_STORE_SEND_KEY_ORIGINAL)
     return restored
 
 
@@ -835,6 +951,16 @@ def _record_ws_patch(manifest: dict[str, Any], result: dict[str, Any]) -> None:
         if patch.get("kind") != "source_ws_browser"
     ]
     patches.append({"kind": "source_ws_browser", **result})
+    manifest["runtime_patches"] = patches
+
+
+def _record_browser_store_patch(manifest: dict[str, Any], result: dict[str, Any]) -> None:
+    patches = [
+        patch
+        for patch in manifest.get("runtime_patches", [])
+        if patch.get("kind") != "source_browser_store"
+    ]
+    patches.append({"kind": "source_browser_store", **result})
     manifest["runtime_patches"] = patches
 
 

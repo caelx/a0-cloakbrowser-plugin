@@ -35,6 +35,11 @@ def test_successful_setup_reconciles_browser_lifecycle(monkeypatch, tmp_path):
         "patch_ws_browser_source",
         lambda manifest: {"applied": True, "already_patched": False},
     )
+    monkeypatch.setattr(
+        setup,
+        "patch_browser_store_source",
+        lambda manifest: {"applied": True, "already_patched": False},
+    )
     monkeypatch.setattr(setup, "verify_extension_reconciliation", lambda cfg: {"ok": True})
     monkeypatch.setattr(setup, "validate_runtime_patch", lambda manifest: {"ok": True})
     order = []
@@ -104,6 +109,11 @@ def test_setup_fails_when_agent_zero_restart_is_still_required(monkeypatch, tmp_
         "patch_ws_browser_source",
         lambda manifest: {"applied": True, "already_patched": False},
     )
+    monkeypatch.setattr(
+        setup,
+        "patch_browser_store_source",
+        lambda manifest: {"applied": True, "already_patched": False},
+    )
     monkeypatch.setattr(setup, "validate_runtime_patch", lambda manifest: {"ok": True})
     monkeypatch.setattr(setup, "verify_browser_launch", lambda: {"ok": True})
     monkeypatch.setattr(
@@ -164,6 +174,11 @@ def test_setup_succeeds_when_agent_zero_restart_is_scheduled(monkeypatch, tmp_pa
     monkeypatch.setattr(
         setup,
         "patch_ws_browser_source",
+        lambda manifest: {"applied": True, "already_patched": False},
+    )
+    monkeypatch.setattr(
+        setup,
+        "patch_browser_store_source",
         lambda manifest: {"applied": True, "already_patched": False},
     )
     monkeypatch.setattr(setup, "validate_runtime_patch", lambda manifest: {"ok": True})

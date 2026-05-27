@@ -35,16 +35,20 @@ def test_patch_runtime_source_applies_current_patch_without_legacy_plugin_root(m
 def test_patch_runtime_source_rebuilds_metadata_for_existing_patch(monkeypatch, tmp_path):
     runtime = tmp_path / "runtime.py"
     ws_browser = tmp_path / "ws_browser.py"
+    browser_store = tmp_path / "browser-store.js"
     original = _current_runtime_source()
     runtime.write_text(original, encoding="utf-8")
     ws_browser.write_text(_ws_browser_source(), encoding="utf-8")
+    browser_store.write_text(_browser_store_source(), encoding="utf-8")
     monkeypatch.setattr(source_patch, "browser_runtime_source_path", lambda: runtime)
     monkeypatch.setattr(source_patch, "browser_ws_source_path", lambda: ws_browser)
+    monkeypatch.setattr(source_patch, "browser_store_source_path", lambda: browser_store)
     source_patch.patch_runtime_source({})
 
     manifest = {}
     result = source_patch.patch_runtime_source(manifest)
     source_patch.patch_ws_browser_source(manifest)
+    source_patch.patch_browser_store_source(manifest)
 
     backup = result["backup_path"]
     assert result["already_patched"] is True
@@ -156,6 +160,50 @@ def test_restore_ws_browser_source_patch_requires_matching_hash(monkeypatch, tmp
 
     assert restored["restored"] is True
     assert ws_browser.read_text(encoding="utf-8") == original
+
+
+def test_patch_browser_store_source_marks_handled_keyboard_events(monkeypatch, tmp_path):
+    browser_store = tmp_path / "browser-store.js"
+    browser_store.write_text(_browser_store_source(), encoding="utf-8")
+    monkeypatch.setattr(source_patch, "browser_store_source_path", lambda: browser_store)
+    manifest = {}
+
+    result = source_patch.patch_browser_store_source(manifest)
+
+    text = browser_store.read_text(encoding="utf-8")
+    assert result["applied"] is True
+    assert result["patch_version"] == source_patch.BROWSER_STORE_PATCH_VERSION
+    assert source_patch.BROWSER_STORE_PATCH_MARKER in text
+    assert "__cloakbrowserBrowserKeydownHandled" in text
+    assert "viewer_id: this._viewerToken" in text
+    assert manifest["browser_store_source_patch"]["target_path"] == str(browser_store)
+    assert manifest["runtime_patches"][0]["kind"] == "source_browser_store"
+
+    second = source_patch.patch_browser_store_source(manifest)
+    assert second["already_patched"] is True
+    assert second["backup_path"] == result["backup_path"]
+
+
+def test_restore_browser_store_source_patch_requires_matching_hash(monkeypatch, tmp_path):
+    browser_store = tmp_path / "browser-store.js"
+    original = _browser_store_source()
+    browser_store.write_text(original, encoding="utf-8")
+    monkeypatch.setattr(source_patch, "browser_store_source_path", lambda: browser_store)
+    manifest = {}
+    source_patch.patch_browser_store_source(manifest)
+    browser_store.write_text(browser_store.read_text(encoding="utf-8") + "// user edit\n", encoding="utf-8")
+
+    skipped = source_patch.restore_browser_store_source_patch(manifest)
+
+    assert skipped["restored"] is False
+    assert skipped["reason"] == "current_hash_mismatch"
+
+    shutil.copy2(manifest["browser_store_source_patch"]["backup_path"], browser_store)
+    source_patch.patch_browser_store_source(manifest)
+    restored = source_patch.restore_browser_store_source_patch(manifest)
+
+    assert restored["restored"] is True
+    assert browser_store.read_text(encoding="utf-8") == original
 
 
 def test_restore_runtime_source_patch_requires_matching_hash(monkeypatch, tmp_path):
@@ -320,4 +368,21 @@ from helpers.ws import WsHandler
             return self._error("INPUT_FAILED", str(exc), data)
 
         return {{"state": result, "snapshot": None}}
+"""
+
+
+def _browser_store_source() -> str:
+    return f"""
+const model = {{
+{source_patch.BROWSER_STORE_HANDLE_KEYDOWN_ORIGINAL}    void this.sendKey(event);
+  }},
+
+  async sendKey(event) {{
+    const contextId = this.contextId;
+    const printable = event.key && event.key.length === 1;
+{source_patch.BROWSER_STORE_SEND_KEY_ORIGINAL}      key: printable ? "" : event.key,
+      text: printable ? event.key : "",
+    }});
+  }},
+}};
 """

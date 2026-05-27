@@ -14,6 +14,9 @@ from .source_patch import (
     CLOSE_BROWSER_PATCHED,
     CONTEXT_CLOSED_PATCHED,
     CONTENT_HELPER_PATCHED,
+    BROWSER_STORE_HANDLE_KEYDOWN_PATCHED,
+    BROWSER_STORE_PATCH_VERSION,
+    BROWSER_STORE_SEND_KEY_PATCHED,
     LAUNCH_PATCHED,
     OPEN_PATCHED,
     OPEN_PATCHED_WITH_LIMIT,
@@ -24,6 +27,7 @@ from .source_patch import (
     WS_CLASS_PATCHED,
     WS_INPUT_PATCHED,
     WS_PATCH_VERSION,
+    browser_store_source_path,
     browser_runtime_source_path,
     browser_ws_source_path,
 )
@@ -101,6 +105,48 @@ def validate_runtime_patch(manifest: dict[str, Any] | None = None) -> dict[str, 
                 "ws_target_path": str(ws_target),
                 "ws_current_hash": ws_current_hash,
                 "ws_backup_path": str(ws_backup_path) if ws_patch.get("backup_path") else "",
+            }
+        )
+
+    browser_store_patch = manifest.get("browser_store_source_patch") or {}
+    details["browser_store_manifest"] = browser_store_patch
+    try:
+        browser_store_target = Path(str(browser_store_patch.get("target_path") or browser_store_source_path()))
+        browser_store_text = browser_store_target.read_text(encoding="utf-8")
+        browser_store_current_hash = sha256_file(browser_store_target)
+    except Exception as exc:
+        checks["browser_store_source_readable"] = False
+        details["browser_store_error"] = str(exc)
+    else:
+        checks["browser_store_patch_version_current"] = (
+            browser_store_patch.get("patch_version") == BROWSER_STORE_PATCH_VERSION
+        )
+        checks["browser_store_keyboard_marker_present"] = (
+            BROWSER_STORE_HANDLE_KEYDOWN_PATCHED in browser_store_text
+            and BROWSER_STORE_SEND_KEY_PATCHED in browser_store_text
+        )
+        browser_store_backup_path = Path(str(browser_store_patch.get("backup_path") or ""))
+        checks["browser_store_backup_exists"] = (
+            bool(browser_store_patch.get("backup_path")) and browser_store_backup_path.is_file()
+        )
+        checks["browser_store_patched_hash_matches"] = bool(
+            browser_store_patch.get("patched_hash")
+        ) and browser_store_current_hash == browser_store_patch.get("patched_hash")
+        browser_store_original_hash = browser_store_patch.get("original_hash")
+        checks["browser_store_original_hash_recorded"] = bool(browser_store_original_hash)
+        if checks["browser_store_backup_exists"] and browser_store_original_hash:
+            checks["browser_store_backup_hash_matches"] = (
+                sha256_file(browser_store_backup_path) == browser_store_original_hash
+            )
+        else:
+            checks["browser_store_backup_hash_matches"] = False
+        details.update(
+            {
+                "browser_store_target_path": str(browser_store_target),
+                "browser_store_current_hash": browser_store_current_hash,
+                "browser_store_backup_path": (
+                    str(browser_store_backup_path) if browser_store_patch.get("backup_path") else ""
+                ),
             }
         )
 
