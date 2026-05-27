@@ -109,6 +109,25 @@ def test_patch_runtime_source_upgrades_v10_without_marker_corruption(monkeypatch
     assert "_cloakbrowser_sys.path.insert(0, _cloakbrowser_dir)" not in text
 
 
+def test_patch_runtime_source_upgrades_v16_helper(monkeypatch, tmp_path):
+    runtime = tmp_path / "runtime.py"
+    v16_text = source_patch.patch_runtime_source_text(_old_runtime_source()).replace(
+        source_patch.PATCH_MARKER,
+        "CLOAKBROWSER_SOURCE_PATCH_V16",
+    )
+    runtime.write_text(v16_text, encoding="utf-8")
+    monkeypatch.setattr(source_patch, "browser_runtime_source_path", lambda: runtime)
+
+    result = source_patch.patch_runtime_source({})
+
+    text = runtime.read_text(encoding="utf-8")
+    assert result["upgraded"] is True
+    assert source_patch.PATCH_MARKER in text
+    assert "CLOAKBROWSER_SOURCE_PATCH_V16" not in text
+    assert "get_enabled_plugins(None)" in text
+    assert "return None" in text
+
+
 def test_source_runtime_helper_does_not_import_ambient_plugin_imports():
     helper = source_patch.SOURCE_RUNTIME_HELPER
 
@@ -116,6 +135,14 @@ def test_source_runtime_helper_does_not_import_ambient_plugin_imports():
     assert "spec_from_file_location" in helper
     assert '"_cloakbrowser_plugin_imports"' in helper
     assert '"/plugin_imports.py"' in helper
+
+
+def test_source_runtime_helper_bypasses_when_plugin_is_disabled():
+    helper = source_patch.SOURCE_RUNTIME_HELPER
+
+    assert "get_enabled_plugins(None)" in helper
+    assert "return None" in helper
+    assert '"cloakbrowser"' in helper
 
 
 def test_patch_ws_browser_source_dedupes_duplicate_keyboard_events(monkeypatch, tmp_path):
@@ -131,6 +158,8 @@ def test_patch_ws_browser_source_dedupes_duplicate_keyboard_events(monkeypatch, 
     assert result["patch_version"] == source_patch.WS_PATCH_VERSION
     assert source_patch.WS_PATCH_MARKER in text
     assert "_last_keyboard_inputs" in text
+    assert "viewer_id = str(data.get(\"viewer_id\") or sid or \"\")" in text
+    assert "viewer_id," in text
     assert "keyboard_now - float(previous_keyboard.get(\"t\") or 0) < 0.025" in text
     assert manifest["ws_browser_source_patch"]["target_path"] == str(ws_browser)
     assert manifest["runtime_patches"][0]["kind"] == "source_ws_browser"
@@ -138,6 +167,44 @@ def test_patch_ws_browser_source_dedupes_duplicate_keyboard_events(monkeypatch, 
     second = source_patch.patch_ws_browser_source(manifest)
     assert second["already_patched"] is True
     assert second["backup_path"] == result["backup_path"]
+
+
+def test_patch_ws_browser_source_rebuilds_metadata_for_existing_patch(monkeypatch, tmp_path):
+    ws_browser = tmp_path / "ws_browser.py"
+    ws_browser.write_text(_ws_browser_source(), encoding="utf-8")
+    monkeypatch.setattr(source_patch, "browser_ws_source_path", lambda: ws_browser)
+    source_patch.patch_ws_browser_source({})
+
+    manifest = {}
+    result = source_patch.patch_ws_browser_source(manifest)
+
+    assert result["already_patched"] is True
+    assert result["backup_path"]
+    assert result["original_hash"]
+    assert source_patch.sha256_file(Path(result["backup_path"])) == result["original_hash"]
+    assert Path(result["backup_path"]).read_text(encoding="utf-8") == _ws_browser_source()
+
+
+def test_patch_ws_browser_source_upgrades_v1_keyboard_signature(monkeypatch, tmp_path):
+    ws_browser = tmp_path / "ws_browser.py"
+    v1_text = source_patch.patch_ws_browser_source_text(_ws_browser_source()).replace(
+        source_patch.WS_CLASS_PATCHED,
+        source_patch.WS_CLASS_PATCHED_V1,
+    ).replace(
+        source_patch.WS_INPUT_PATCHED,
+        source_patch.WS_INPUT_PATCHED_V1,
+    )
+    ws_browser.write_text(v1_text, encoding="utf-8")
+    monkeypatch.setattr(source_patch, "browser_ws_source_path", lambda: ws_browser)
+
+    result = source_patch.patch_ws_browser_source({})
+
+    text = ws_browser.read_text(encoding="utf-8")
+    assert result["upgraded"] is True
+    assert source_patch.WS_PATCH_MARKER in text
+    assert "CLOAKBROWSER_WS_SOURCE_PATCH_V1" not in text
+    assert "viewer_id = str(data.get(\"viewer_id\") or sid or \"\")" in text
+    assert "viewer_id," in text
 
 
 def test_restore_ws_browser_source_patch_requires_matching_hash(monkeypatch, tmp_path):
@@ -182,6 +249,22 @@ def test_patch_browser_store_source_marks_handled_keyboard_events(monkeypatch, t
     second = source_patch.patch_browser_store_source(manifest)
     assert second["already_patched"] is True
     assert second["backup_path"] == result["backup_path"]
+
+
+def test_patch_browser_store_source_rebuilds_metadata_for_existing_patch(monkeypatch, tmp_path):
+    browser_store = tmp_path / "browser-store.js"
+    browser_store.write_text(_browser_store_source(), encoding="utf-8")
+    monkeypatch.setattr(source_patch, "browser_store_source_path", lambda: browser_store)
+    source_patch.patch_browser_store_source({})
+
+    manifest = {}
+    result = source_patch.patch_browser_store_source(manifest)
+
+    assert result["already_patched"] is True
+    assert result["backup_path"]
+    assert result["original_hash"]
+    assert source_patch.sha256_file(Path(result["backup_path"])) == result["original_hash"]
+    assert Path(result["backup_path"]).read_text(encoding="utf-8") == _browser_store_source()
 
 
 def test_restore_browser_store_source_patch_requires_matching_hash(monkeypatch, tmp_path):
