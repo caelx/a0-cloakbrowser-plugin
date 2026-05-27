@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Bump plugin version to `1.3.12`.
+- Mark Browser keydown events as handled in the Agent Zero frontend so duplicate
+  global listeners cannot emit the same keyboard event twice.
+- Bump plugin version to `1.3.11`.
+- Add a setup-time Agent Zero Browser websocket source patch that drops
+  duplicate keyboard emits arriving within 25 ms for the same browser/key.
 - Bump plugin version to `1.3.10`.
 - Fall back to Git tag discovery when the GitHub tags API rate-limits uBOL
   metadata checks, and accept `GH_TOKEN` as an auth fallback.

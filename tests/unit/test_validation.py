@@ -3,9 +3,20 @@ from helpers import source_patch, validation
 
 def test_validate_runtime_patch_accepts_complete_current_patch(monkeypatch, tmp_path):
     runtime = tmp_path / "runtime.py"
+    ws_browser = tmp_path / "ws_browser.py"
+    browser_store = tmp_path / "browser-store.js"
     runtime.write_text(source_patch.patch_runtime_source_text(_runtime_source()), encoding="utf-8")
+    ws_browser.write_text(source_patch.patch_ws_browser_source_text(_ws_browser_source()), encoding="utf-8")
+    browser_store.write_text(
+        source_patch.patch_browser_store_source_text(_browser_store_source()),
+        encoding="utf-8",
+    )
     backup = tmp_path / "runtime.backup.py"
+    ws_backup = tmp_path / "ws_browser.backup.py"
+    browser_store_backup = tmp_path / "browser-store.backup.js"
     backup.write_text(_runtime_source(), encoding="utf-8")
+    ws_backup.write_text(_ws_browser_source(), encoding="utf-8")
+    browser_store_backup.write_text(_browser_store_source(), encoding="utf-8")
     manifest = {
         "runtime_source_patch": {
             "target_path": str(runtime),
@@ -13,9 +24,25 @@ def test_validate_runtime_patch_accepts_complete_current_patch(monkeypatch, tmp_
             "original_hash": source_patch.sha256_file(backup),
             "patched_hash": source_patch.sha256_file(runtime),
             "patch_version": source_patch.PATCH_VERSION,
-        }
+        },
+        "ws_browser_source_patch": {
+            "target_path": str(ws_browser),
+            "backup_path": str(ws_backup),
+            "original_hash": source_patch.sha256_file(ws_backup),
+            "patched_hash": source_patch.sha256_file(ws_browser),
+            "patch_version": source_patch.WS_PATCH_VERSION,
+        },
+        "browser_store_source_patch": {
+            "target_path": str(browser_store),
+            "backup_path": str(browser_store_backup),
+            "original_hash": source_patch.sha256_file(browser_store_backup),
+            "patched_hash": source_patch.sha256_file(browser_store),
+            "patch_version": source_patch.BROWSER_STORE_PATCH_VERSION,
+        },
     }
     monkeypatch.setattr(source_patch, "browser_runtime_source_path", lambda: runtime)
+    monkeypatch.setattr(source_patch, "browser_ws_source_path", lambda: ws_browser)
+    monkeypatch.setattr(source_patch, "browser_store_source_path", lambda: browser_store)
 
     result = validation.validate_runtime_patch(manifest)
 
@@ -25,9 +52,20 @@ def test_validate_runtime_patch_accepts_complete_current_patch(monkeypatch, tmp_
 
 def test_validate_runtime_patch_reports_missing_launch_patch(monkeypatch, tmp_path):
     runtime = tmp_path / "runtime.py"
+    ws_browser = tmp_path / "ws_browser.py"
+    browser_store = tmp_path / "browser-store.js"
     runtime.write_text(source_patch.SOURCE_RUNTIME_HELPER, encoding="utf-8")
+    ws_browser.write_text(source_patch.patch_ws_browser_source_text(_ws_browser_source()), encoding="utf-8")
+    browser_store.write_text(
+        source_patch.patch_browser_store_source_text(_browser_store_source()),
+        encoding="utf-8",
+    )
     backup = tmp_path / "runtime.backup.py"
+    ws_backup = tmp_path / "ws_browser.backup.py"
+    browser_store_backup = tmp_path / "browser-store.backup.js"
     backup.write_text(_runtime_source(), encoding="utf-8")
+    ws_backup.write_text(_ws_browser_source(), encoding="utf-8")
+    browser_store_backup.write_text(_browser_store_source(), encoding="utf-8")
     manifest = {
         "runtime_source_patch": {
             "target_path": str(runtime),
@@ -35,9 +73,25 @@ def test_validate_runtime_patch_reports_missing_launch_patch(monkeypatch, tmp_pa
             "original_hash": source_patch.sha256_file(backup),
             "patched_hash": source_patch.sha256_file(runtime),
             "patch_version": source_patch.PATCH_VERSION,
-        }
+        },
+        "ws_browser_source_patch": {
+            "target_path": str(ws_browser),
+            "backup_path": str(ws_backup),
+            "original_hash": source_patch.sha256_file(ws_backup),
+            "patched_hash": source_patch.sha256_file(ws_browser),
+            "patch_version": source_patch.WS_PATCH_VERSION,
+        },
+        "browser_store_source_patch": {
+            "target_path": str(browser_store),
+            "backup_path": str(browser_store_backup),
+            "original_hash": source_patch.sha256_file(browser_store_backup),
+            "patched_hash": source_patch.sha256_file(browser_store),
+            "patch_version": source_patch.BROWSER_STORE_PATCH_VERSION,
+        },
     }
     monkeypatch.setattr(source_patch, "browser_runtime_source_path", lambda: runtime)
+    monkeypatch.setattr(source_patch, "browser_ws_source_path", lambda: ws_browser)
+    monkeypatch.setattr(source_patch, "browser_store_source_path", lambda: browser_store)
 
     result = validation.validate_runtime_patch(manifest)
 
@@ -57,5 +111,37 @@ def _runtime_source() -> str:
             source_patch.CLOSE_ALL_ORIGINAL,
             source_patch.CONTEXT_CLOSED_ORIGINAL,
             source_patch.STOP_PLAYWRIGHT_ORIGINAL,
+        ]
+    )
+
+
+def _ws_browser_source() -> str:
+    return "\n".join(
+        [
+            source_patch.WS_CLASS_ORIGINAL,
+            "    async def _input(self, data, sid):",
+            source_patch.WS_INPUT_ORIGINAL,
+            "            result = {}",
+            "        except Exception:",
+            "            raise",
+            "        return result",
+        ]
+    )
+
+
+def _browser_store_source() -> str:
+    return "\n".join(
+        [
+            "const model = {",
+            source_patch.BROWSER_STORE_HANDLE_KEYDOWN_ORIGINAL,
+            "    void this.sendKey(event);",
+            "  },",
+            "  async sendKey(event) {",
+            source_patch.BROWSER_STORE_SEND_KEY_ORIGINAL,
+            "      key: printable ? \"\" : event.key,",
+            "      text: printable ? event.key : \"\",",
+            "    });",
+            "  },",
+            "};",
         ]
     )
