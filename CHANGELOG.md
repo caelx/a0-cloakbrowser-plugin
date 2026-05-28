@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Bump plugin version to `1.3.14`.
+- Treat scheduled Agent Zero restarts as successful first-run readiness, remove
+  the misleading failed-item next action, and shorten Execute output.
 - Bump plugin version to `1.3.13`.
 - Keep Browser keyboard dedupe scoped to the emitting viewer, restore disabled
   plugin opt-out in the runtime source bootstrap, and rebuild sidecar patch

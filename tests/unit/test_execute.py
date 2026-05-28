@@ -141,8 +141,126 @@ def test_execute_json_mode_allows_pending_restart(monkeypatch, capsys):
     payload = json.loads(capsys.readouterr().out)
 
     assert payload["ok"] is True
+    assert payload["readiness"]["ok"] is True
     assert payload["readiness"]["restart_scheduled"] is True
     assert "scheduled" in payload["readiness"]["restart_message"]
+
+
+def test_execute_human_mode_treats_scheduled_restart_as_ready(monkeypatch, capsys):
+    status = _status()
+    status["invariants"] = {
+        "source_patch_current": True,
+        "extension_config_reconciled": True,
+        "last_launch_used_cloakbrowser": False,
+    }
+    status["effective_location"] = {}
+    status["extensions"]["items"] = [
+        {"name": "uBlock Origin Lite", "installed": False, "enabled": False},
+        {"name": "I still don't care about cookies", "installed": False, "enabled": False},
+    ]
+    status["extensions"]["active_paths"] = []
+
+    def fake_import(name):
+        if name == "helpers.setup":
+            return type(
+                "Setup",
+                (),
+                {
+                    "setup_plugin": lambda **kwargs: {
+                        "ok": True,
+                        "system": {"ok": True, "installed_packages": ["xvfb"], "failed_packages": []},
+                        "python": {"ok": True, "command": ["python", "-m", "pip", "install"]},
+                        "display": {"ok": True, "display": ":99", "managed_by": "cloakbrowser"},
+                        "extension_actions": [
+                            {"name": "uBlock Origin Lite", "action": "skipped", "installed": False, "enabled": False},
+                            {
+                                "name": "I still don't care about cookies",
+                                "action": "skipped",
+                                "installed": False,
+                                "enabled": False,
+                            },
+                        ],
+                        "restart_scheduled": True,
+                        "restart_message": "Agent Zero run_ui restart scheduled in 10 seconds.",
+                    }
+                },
+            )
+        if name == "helpers.diagnostics":
+            return type("Diagnostics", (), {"collect_status": lambda: status})
+        raise AssertionError(name)
+
+    monkeypatch.setattr(plugin_imports, "plugin_import", fake_import)
+    monkeypatch.setattr(execute, "_is_plugin_enabled", lambda: True)
+
+    assert execute.main([]) == 0
+    output = capsys.readouterr().out
+
+    assert "Final readiness: ready after scheduled restart" in output
+    assert "failed item" not in output
+    assert "Effective location: not recorded" not in output
+    assert "all managed extensions disabled" in output
+
+
+def test_status_human_mode_omits_missing_location(monkeypatch, capsys):
+    status = _status()
+    status["effective_location"] = {}
+
+    def fake_import(name):
+        if name == "helpers.diagnostics":
+            return type("Diagnostics", (), {"collect_status": lambda: status})
+        raise AssertionError(name)
+
+    monkeypatch.setattr(plugin_imports, "plugin_import", fake_import)
+    monkeypatch.setattr(execute, "_is_plugin_enabled", lambda: True)
+
+    assert execute.main(["status"]) == 0
+    output = capsys.readouterr().out
+
+    assert "CloakBrowser status" in output
+    assert "Effective location: not recorded" not in output
+
+
+def test_scheduled_restart_does_not_mask_other_readiness_failures(monkeypatch, capsys):
+    status = _status()
+    status["display"] = {
+        "current": ":99",
+        "configured": ":99",
+        "usable_current": False,
+        "usable_configured": False,
+    }
+    status["invariants"] = {
+        "source_patch_current": True,
+        "extension_config_reconciled": True,
+        "last_launch_used_cloakbrowser": False,
+    }
+
+    def fake_import(name):
+        if name == "helpers.setup":
+            return type(
+                "Setup",
+                (),
+                {
+                    "setup_plugin": lambda **kwargs: {
+                        "ok": True,
+                        "restart_scheduled": True,
+                        "restart_message": "Agent Zero run_ui restart scheduled in 10 seconds.",
+                    }
+                },
+            )
+        if name == "helpers.diagnostics":
+            return type("Diagnostics", (), {"collect_status": lambda: status})
+        raise AssertionError(name)
+
+    monkeypatch.setattr(plugin_imports, "plugin_import", fake_import)
+    monkeypatch.setattr(execute, "_is_plugin_enabled", lambda: True)
+
+    assert execute.main(["--json"]) == 1
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["ok"] is False
+    assert payload["readiness"]["restart_scheduled"] is True
+    assert "display_usable" in payload["readiness"]["failed"]
+    assert "last_launch_used_cloakbrowser" not in payload["readiness"]["failed"]
 
 
 def test_execute_reconcile_alias_runs_setup(monkeypatch, capsys):

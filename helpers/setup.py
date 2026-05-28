@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import importlib.metadata
+import contextlib
 import shutil
 import copy
+import io
 from typing import Any
 
 from .config import apply_environment, get_config
@@ -49,9 +51,10 @@ def setup_plugin(*, noninteractive: bool = False, skip_system_deps: bool = False
         return {"ok": False, "system": system_result, "python": python_result, "manifest": manifest}
 
     try:
-        import cloakbrowser
+        with contextlib.redirect_stdout(io.StringIO()):
+            import cloakbrowser
 
-        binary = cloakbrowser.ensure_binary()
+            binary = cloakbrowser.ensure_binary()
         manifest["cloakbrowser"] = {
             "version": importlib.metadata.version("cloakbrowser"),
             "binary_path": binary,
@@ -116,9 +119,9 @@ def setup_plugin(*, noninteractive: bool = False, skip_system_deps: bool = False
         restart = lifecycle.get("agent_zero_restart") or {}
         if restart.get("scheduled"):
             launch_verification = {
-                "ok": False,
+                "ok": True,
                 "skipped": True,
-                "reason": "agent_zero_restart_scheduled",
+                "reason": "assumed_ready_after_agent_zero_restart",
                 "message": restart.get("message", "Agent Zero restart scheduled after Execute returns."),
             }
             manifest["launch_verification"] = launch_verification
