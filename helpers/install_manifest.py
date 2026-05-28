@@ -7,7 +7,7 @@ from typing import Any
 
 from .config import manifest_path
 
-PLUGIN_VERSION = "1.3.13"
+PLUGIN_VERSION = "1.3.14"
 
 
 def empty_manifest() -> dict[str, Any]:
