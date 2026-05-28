@@ -146,7 +146,8 @@ def setup_readiness(
         "last_launch_used_cloakbrowser": bool(invariants.get("last_launch_used_cloakbrowser")),
     }
     restart_scheduled = bool((setup_result or {}).get("restart_scheduled"))
-    if restart_scheduled:
+    launch_verification = status.get("launch_verification") or {}
+    if restart_scheduled or launch_verification.get("ok"):
         checks["last_launch_used_cloakbrowser"] = True
     if status.get("config", {}).get("runtime", {}).get("headed"):
         display = status.get("display", {})

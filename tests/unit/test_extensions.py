@@ -1,5 +1,3 @@
-import types
-from contextlib import contextmanager
 from pathlib import Path
 
 from helpers import extensions
@@ -24,17 +22,10 @@ def test_sync_browser_extension_paths_uses_upstream_browser_config(monkeypatch, 
     monkeypatch.setattr(extensions, "_is_loadable", lambda path: path == ubol)
 
     saved = {}
-    helpers_plugins = types.SimpleNamespace(
-        save_plugin_config=lambda name, project, agent, cfg: saved.update(cfg)
-    )
     monkeypatch.setattr(
-        extensions,
-        "_agent_zero_browser_config_context",
-        lambda: _browser_config_context(
-            helpers_plugins,
-            lambda: {"extension_paths": ["/external", str(stale_ubol), str(ubol)]},
-        ),
+        extensions, "_load_browser_config", lambda: {"extension_paths": ["/external", str(stale_ubol), str(ubol)]}
     )
+    monkeypatch.setattr(extensions, "_save_browser_config", lambda cfg: saved.update(cfg))
 
     active = extensions.sync_browser_extension_paths(
         {
@@ -62,17 +53,10 @@ def test_sync_browser_extension_paths_dedupes_exact_paths(monkeypatch, tmp_path)
     monkeypatch.setattr(extensions, "managed_extension_paths", lambda: paths)
 
     saved = {}
-    helpers_plugins = types.SimpleNamespace(
-        save_plugin_config=lambda name, project, agent, cfg: saved.update(cfg)
-    )
     monkeypatch.setattr(
-        extensions,
-        "_agent_zero_browser_config_context",
-        lambda: _browser_config_context(
-            helpers_plugins,
-            lambda: {"extension_paths": ["/external", "/external", str(ubol)]},
-        ),
+        extensions, "_load_browser_config", lambda: {"extension_paths": ["/external", "/external", str(ubol)]}
     )
+    monkeypatch.setattr(extensions, "_save_browser_config", lambda cfg: saved.update(cfg))
 
     active = extensions.sync_browser_extension_paths(
         {
@@ -105,17 +89,12 @@ def test_disable_managed_extension_paths_removes_upstream_browser_config(monkeyp
         },
     )
     saved = {}
-    helpers_plugins = types.SimpleNamespace(
-        save_plugin_config=lambda name, project, agent, cfg: saved.update(cfg)
-    )
     monkeypatch.setattr(
         extensions,
-        "_agent_zero_browser_config_context",
-        lambda: _browser_config_context(
-            helpers_plugins,
-            lambda: {"extension_paths": [str(ubol), "/external", str(stale_cookies), str(cookies)]},
-        ),
+        "_load_browser_config",
+        lambda: {"extension_paths": [str(ubol), "/external", str(stale_cookies), str(cookies)]},
     )
+    monkeypatch.setattr(extensions, "_save_browser_config", lambda cfg: saved.update(cfg))
 
     removed = extensions.disable_managed_extension_paths()
 
@@ -188,19 +167,26 @@ def test_verify_extension_reconciliation_detects_disabled_managed_path(monkeypat
         "bypass_paywalls_clean": tmp_path / "bpc",
     }
     monkeypatch.setattr(extensions, "managed_extension_paths", lambda: paths)
-    monkeypatch.setattr(
-        extensions,
-        "_agent_zero_browser_config_context",
-        lambda: _browser_config_context(
-            types.SimpleNamespace(save_plugin_config=lambda *args: None),
-            lambda: {"extension_paths": [str(ubol)]},
-        ),
-    )
+    monkeypatch.setattr(extensions, "_load_browser_config", lambda: {"extension_paths": [str(ubol)]})
 
     result = extensions.verify_extension_reconciliation(_extension_config(enable_ubol=False))
 
     assert result["ok"] is False
     assert "ublock_origin_lite_browser_synced" in result["failed"]
+
+
+def test_browser_config_path_prefers_agent_zero_source_config(monkeypatch, tmp_path):
+    plugin_root = tmp_path / "a0" / "usr" / "plugins" / "cloakbrowser"
+    source_browser = tmp_path / "a0" / "plugins" / "_browser"
+    user_browser = tmp_path / "a0" / "usr" / "plugins" / "_browser"
+    plugin_root.mkdir(parents=True)
+    source_browser.mkdir(parents=True)
+    user_browser.mkdir(parents=True)
+    source_config = source_browser / "config.json"
+    source_config.write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(extensions, "__file__", str(plugin_root / "helpers" / "extensions.py"))
+
+    assert extensions._browser_config_path() == source_config
 
 
 def test_atomic_install_extension_restores_old_on_failure(tmp_path):
@@ -254,8 +240,3 @@ def _write_manifest(path):
     path.mkdir(parents=True, exist_ok=True)
     (path / "manifest.json").write_text('{"name": "uBOL", "version": "2"}', encoding="utf-8")
     return {"path": str(path), "manifest_name": "uBOL", "manifest_version": "2"}
-
-
-@contextmanager
-def _browser_config_context(plugins, get_browser_config):
-    yield plugins, get_browser_config

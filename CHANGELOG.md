@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Bump plugin version to `1.3.15`.
+- Install the Agent Zero helper dependencies needed by CloakBrowser setup
+  and suppress CloakBrowser's import banner in status diagnostics.
 - Bump plugin version to `1.3.14`.
 - Treat scheduled Agent Zero restarts as successful first-run readiness, remove
   the misleading failed-item next action, and shorten Execute output.

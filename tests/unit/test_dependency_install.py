@@ -105,3 +105,24 @@ def test_python_dependencies_install_patchright_when_missing(monkeypatch):
     assert commands[0][-1] == "patchright"
     assert "playwright_preserved" in result["actions"]
     assert "patchright_install_missing" in result["actions"]
+
+
+def test_python_dependencies_split_multiline_requirements(monkeypatch):
+    commands = []
+    monkeypatch.setattr(dependency_install.importlib.util, "find_spec", lambda name: object())
+    monkeypatch.setattr(
+        dependency_install.subprocess,
+        "run",
+        lambda cmd, **kwargs: commands.append(cmd) or Result(),
+    )
+
+    result = dependency_install.install_python_dependencies(
+        "cloakbrowser[geoip,patchright]>=0.3.30\nregex\nsimpleeval\nPyYAML\nGitPython"
+    )
+
+    assert result["ok"] is True
+    assert "cloakbrowser[geoip,patchright]>=0.3.30" in commands[0]
+    assert "regex" in commands[0]
+    assert "simpleeval" in commands[0]
+    assert "PyYAML" in commands[0]
+    assert "GitPython" in commands[0]

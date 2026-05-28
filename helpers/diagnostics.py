@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import importlib
+import contextlib
+import io
 import os
 import platform
 import shutil
@@ -90,7 +92,8 @@ def collect_status(config: dict[str, Any] | None = None) -> dict[str, Any]:
 
 def cloakbrowser_status() -> dict[str, Any]:
     try:
-        mod = importlib.import_module("cloakbrowser")
+        with contextlib.redirect_stdout(io.StringIO()):
+            mod = importlib.import_module("cloakbrowser")
     except Exception as exc:
         return {"installed": False, "error": str(exc)}
     out: dict[str, Any] = {
@@ -98,13 +101,15 @@ def cloakbrowser_status() -> dict[str, Any]:
         "version": getattr(mod, "__version__", ""),
     }
     try:
-        out["binary_path"] = mod.ensure_binary()
+        with contextlib.redirect_stdout(io.StringIO()):
+            out["binary_path"] = mod.ensure_binary()
     except Exception as exc:
         out["binary_error"] = str(exc)
     try:
-        from cloakbrowser import binary_info
+        with contextlib.redirect_stdout(io.StringIO()):
+            from cloakbrowser import binary_info
 
-        out["binary_info"] = binary_info()
+            out["binary_info"] = binary_info()
     except Exception as exc:
         out["binary_info_error"] = str(exc)
     return out
@@ -113,20 +118,18 @@ def cloakbrowser_status() -> dict[str, Any]:
 def browser_status() -> dict[str, Any]:
     try:
         from .runtime_patch import _agent_zero_import_context
+        from .extensions import _load_browser_config
 
         with _agent_zero_import_context():
-            from helpers import plugins
             from plugins._browser.helpers.config import (
                 build_browser_launch_config,
-                get_browser_config,
             )
 
-            enabled = "_browser" in plugins.get_enabled_plugins(None)
-            browser_config = get_browser_config()
+            browser_config = _load_browser_config()
             launch_config = build_browser_launch_config(browser_config)
         return {
             "upstream_available": True,
-            "builtin_browser_enabled": enabled,
+            "builtin_browser_enabled": True,
             "extension_paths": browser_config.get("extension_paths", []),
             "launch_args": launch_config.get("args", []),
         }

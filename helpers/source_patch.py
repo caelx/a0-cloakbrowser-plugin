@@ -758,30 +758,29 @@ def restore_browser_store_source_patch(manifest: dict[str, Any]) -> dict[str, An
 
 
 def browser_runtime_source_path() -> Path:
-    from .runtime_patch import _agent_zero_import_context
-
-    with _agent_zero_import_context():
-        from plugins._browser.helpers import runtime
-
-        return Path(runtime.__file__).resolve()
+    return _browser_plugin_root() / "helpers" / "runtime.py"
 
 
 def browser_ws_source_path() -> Path:
-    from .runtime_patch import _agent_zero_import_context
-
-    with _agent_zero_import_context():
-        from plugins._browser.api import ws_browser
-
-        return Path(ws_browser.__file__).resolve()
+    return _browser_plugin_root() / "api" / "ws_browser.py"
 
 
 def browser_store_source_path() -> Path:
-    from .runtime_patch import _agent_zero_import_context
+    return _browser_plugin_root() / "webui" / "browser-store.js"
 
-    with _agent_zero_import_context():
-        from plugins._browser.helpers import runtime
 
-        return Path(runtime.__file__).resolve().parents[1] / "webui" / "browser-store.js"
+def _browser_plugin_root() -> Path:
+    from .config import plugin_dir
+
+    root = plugin_dir().resolve()
+    for parent in (root.parent, *root.parents):
+        candidate = parent / "plugins" / "_browser"
+        if (candidate / "helpers" / "runtime.py").is_file():
+            return candidate
+        candidate = parent / "_browser"
+        if (candidate / "helpers" / "runtime.py").is_file():
+            return candidate
+    return root.parents[2] / "plugins" / "_browser"
 
 
 def patch_runtime_source_text(text: str) -> str:
@@ -979,7 +978,11 @@ def _write_reconstructed_backup(target: Path, patched_text: str, unpatcher=unpat
     backup_dir = target.parent / ".cloakbrowser-backups"
     backup_dir.mkdir(parents=True, exist_ok=True)
     backup = backup_dir / f"{target.name}.{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}.reconstructed.bak"
-    backup.write_text(unpatcher(patched_text), encoding="utf-8")
+    try:
+        backup_text = unpatcher(patched_text)
+    except ValueError:
+        backup_text = patched_text
+    backup.write_text(backup_text, encoding="utf-8")
     return backup
 
 

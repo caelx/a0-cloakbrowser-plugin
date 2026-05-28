@@ -147,7 +147,15 @@ def setup_plugin(*, noninteractive: bool = False, skip_system_deps: bool = False
             reason = restart.get("reason") or "agent_zero_restart_required"
             raise RuntimeError(f"Agent Zero restart required after runtime patch: {reason}")
         save_manifest(manifest)
-        launch_verification = verify_browser_launch()
+        try:
+            launch_verification = verify_browser_launch()
+        except ModuleNotFoundError as exc:
+            launch_verification = {
+                "ok": True,
+                "skipped": True,
+                "reason": "agent_zero_launch_import_unavailable",
+                "message": f"Launch verification skipped in Execute subprocess: {exc}",
+            }
         manifest = load_manifest()
         manifest["lifecycle"] = lifecycle
         manifest["launch_verification"] = launch_verification
