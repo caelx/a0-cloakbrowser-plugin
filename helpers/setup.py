@@ -51,7 +51,7 @@ def setup_plugin(*, noninteractive: bool = False, skip_system_deps: bool = False
         return {"ok": False, "system": system_result, "python": python_result, "manifest": manifest}
 
     try:
-        with contextlib.redirect_stdout(io.StringIO()):
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
             import cloakbrowser
 
             binary = cloakbrowser.ensure_binary()

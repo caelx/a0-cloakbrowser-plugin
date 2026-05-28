@@ -92,7 +92,7 @@ def collect_status(config: dict[str, Any] | None = None) -> dict[str, Any]:
 
 def cloakbrowser_status() -> dict[str, Any]:
     try:
-        with contextlib.redirect_stdout(io.StringIO()):
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
             mod = importlib.import_module("cloakbrowser")
     except Exception as exc:
         return {"installed": False, "error": str(exc)}
@@ -101,12 +101,12 @@ def cloakbrowser_status() -> dict[str, Any]:
         "version": getattr(mod, "__version__", ""),
     }
     try:
-        with contextlib.redirect_stdout(io.StringIO()):
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
             out["binary_path"] = mod.ensure_binary()
     except Exception as exc:
         out["binary_error"] = str(exc)
     try:
-        with contextlib.redirect_stdout(io.StringIO()):
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
             from cloakbrowser import binary_info
 
             out["binary_info"] = binary_info()

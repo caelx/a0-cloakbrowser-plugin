@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Bump plugin version to `1.3.16`.
+- Suppress CloakBrowser import banners written to stderr during Execute setup
+  and status checks.
 - Bump plugin version to `1.3.15`.
 - Install the Agent Zero helper dependencies needed by CloakBrowser setup
   and suppress CloakBrowser's import banner in status diagnostics.
