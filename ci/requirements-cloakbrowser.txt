@@ -1,1 +1,11 @@
 cloakbrowser[geoip,patchright]>=0.3.30
+regex
+simpleeval
+PyYAML
+GitPython
+giturlparse
+pydantic
+watchdog
+pytz
+python-dotenv
+webcolors

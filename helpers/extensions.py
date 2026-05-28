@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import shutil
-from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -153,19 +152,16 @@ def install_configured_extensions(
 
 def sync_browser_extension_paths(config: dict[str, Any] | None = None) -> list[str]:
     active = active_extension_paths(config)
-    with _agent_zero_browser_config_context() as (plugins, get_browser_config):
-        browser_config = get_browser_config()
-        current_paths = [
-            str(Path(path).expanduser()) for path in browser_config.get("extension_paths", [])
-        ]
-        managed = managed_extension_paths()
-        preserved = [
-            path for path in current_paths if not _is_managed_extension_path(path, managed)
-        ]
-        browser_config["extension_paths"] = _dedupe_paths(
-            preserved + [path for path in active if path not in preserved]
-        )
-        plugins.save_plugin_config("_browser", "", "", browser_config)
+    browser_config = _load_browser_config()
+    current_paths = [
+        str(Path(path).expanduser()) for path in browser_config.get("extension_paths", [])
+    ]
+    managed = managed_extension_paths()
+    preserved = [path for path in current_paths if not _is_managed_extension_path(path, managed)]
+    browser_config["extension_paths"] = _dedupe_paths(
+        preserved + [path for path in active if path not in preserved]
+    )
+    _save_browser_config(browser_config)
     return active
 
 
@@ -183,8 +179,7 @@ def verify_extension_reconciliation(config: dict[str, Any] | None = None) -> dic
         checks[f"{key}_active_when_enabled"] = (not enabled) or path_text in active
         checks[f"{key}_inactive_when_disabled"] = enabled or path_text not in active
 
-    with _agent_zero_browser_config_context() as (_plugins, get_browser_config):
-        browser_config = get_browser_config()
+    browser_config = _load_browser_config()
     paths = [str(Path(path).expanduser()) for path in browser_config.get("extension_paths", [])]
     details["browser_extension_paths"] = paths
     checks["paths_deduped"] = len(paths) == len(set(paths))
@@ -202,34 +197,59 @@ def verify_extension_reconciliation(config: dict[str, Any] | None = None) -> dic
 
 def disable_managed_extension_paths() -> list[str]:
     removed: list[str] = []
-    with _agent_zero_browser_config_context() as (plugins, get_browser_config):
-        managed = managed_extension_paths()
-        browser_config = get_browser_config()
-        paths = []
-        for path in browser_config.get("extension_paths", []):
-            normalized = str(Path(path).expanduser())
-            if _is_managed_extension_path(normalized, managed):
-                removed.append(normalized)
-                continue
-            paths.append(path)
-        browser_config["extension_paths"] = paths
-        plugins.save_plugin_config("_browser", "", "", browser_config)
+    managed = managed_extension_paths()
+    browser_config = _load_browser_config()
+    paths = []
+    for path in browser_config.get("extension_paths", []):
+        normalized = str(Path(path).expanduser())
+        if _is_managed_extension_path(normalized, managed):
+            removed.append(normalized)
+            continue
+        paths.append(path)
+    browser_config["extension_paths"] = paths
+    _save_browser_config(browser_config)
     return removed
 
 
-@contextmanager
-def _agent_zero_browser_config_context():
-    from .runtime_patch import _agent_zero_import_context
+def _load_browser_config() -> dict[str, Any]:
+    path = _browser_config_path()
+    if not path.is_file():
+        return _normalize_browser_config({})
+    try:
+        return _normalize_browser_config(json.loads(path.read_text(encoding="utf-8") or "{}"))
+    except Exception:
+        return _normalize_browser_config({})
 
-    with _agent_zero_import_context():
-        yield _browser_config_helpers()
+
+def _save_browser_config(config: dict[str, Any]) -> None:
+    path = _browser_config_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(config), encoding="utf-8")
 
 
-def _browser_config_helpers():
-    from helpers import plugins
-    from plugins._browser.helpers.config import get_browser_config
+def _normalize_browser_config(config: dict[str, Any]) -> dict[str, Any]:
+    try:
+        from .runtime_patch import _agent_zero_import_context
 
-    return plugins, get_browser_config
+        with _agent_zero_import_context():
+            from plugins._browser.helpers.config import normalize_browser_config
+
+            return normalize_browser_config(config)
+    except Exception:
+        return config
+
+
+def _browser_config_path() -> Path:
+    root = Path(__file__).resolve().parents[1]
+    for parent in (root.parent, *root.parents):
+        candidate = parent / "plugins" / "_browser" / "config.json"
+        if candidate.is_file():
+            return candidate
+    for parent in (root.parent, *root.parents):
+        candidate = parent / "_browser" / "config.json"
+        if candidate.parent.is_dir() or candidate.is_file():
+            return candidate
+    return root.parent / "_browser" / "config.json"
 
 
 def list_extension_status(config: dict[str, Any] | None = None) -> list[dict[str, Any]]:
